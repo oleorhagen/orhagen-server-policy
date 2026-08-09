@@ -1,5 +1,8 @@
 bundle agent update_from_git
 {
+  meta:
+    "tags" slist => { "autorun" };
+
   vars:
     "masterfiles" string => "/var/cfengine/masterfiles";
 
@@ -7,5 +10,6 @@ bundle agent update_from_git
     "$(paths.git)"
       args    => "-C $(masterfiles) pull --ff-only",
       contain => in_shell,
-      comment => "Pull latest policy from git remote";
+      action  => if_elapsed(15),
+      comment => "Pull latest policy from GitHub every 15 minutes";
 }
