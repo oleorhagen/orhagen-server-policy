@@ -47,7 +47,7 @@ bundle agent tailscale
     # Write apt source (requires os_family to be set)
     "/etc/apt/sources.list.d/tailscale.list"
       create  => "true",
-      content => "deb [signed-by=$(keyring_path)] https://pkgs.tailscale.com/stable/$(os_family)/$(codename) main$(const.n)",
+      content => "deb [signed-by=$(keyring_path)] https://pkgs.tailscale.com/stable/$(os_family) $(codename) main$(const.n)",
       classes => if_repaired("tailscale_source_updated"),
       if      => isvariable("os_family");
 
