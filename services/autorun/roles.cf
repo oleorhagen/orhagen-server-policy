@@ -11,6 +11,9 @@ body file control
 
 bundle agent roles
 {
+  meta:
+    "tags" slist => { "autorun" };
+
   methods:
     "common"  usebundle => role_common;
 
