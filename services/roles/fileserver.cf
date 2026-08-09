@@ -1,0 +1,14 @@
+bundle agent role_fileserver
+{
+  packages:
+    "nfs-kernel-server"
+      policy => "present";
+    "samba"
+      policy => "present";
+
+  services:
+    "nfs-server"
+      service_policy => "start";
+    "smbd"
+      service_policy => "start";
+}

@@ -1,0 +1,28 @@
+body file_control
+{
+  inputs => {
+    "$(this.promise_dirname)/../roles/common.cf",
+    "$(this.promise_dirname)/../roles/k3s_server.cf",
+    "$(this.promise_dirname)/../roles/database.cf",
+    "$(this.promise_dirname)/../roles/fileserver.cf",
+    "$(this.promise_dirname)/../roles/cfengine_hub.cf",
+  };
+}
+
+bundle agent roles
+{
+  methods:
+    "common"  usebundle => role_common;
+
+    orhagen_no_server::
+      "k3s"   usebundle => role_k3s_server;
+
+    postgresql_server_turnkey::
+      "db"    usebundle => role_database;
+
+    fileserver_turnkey::
+      "files" usebundle => role_fileserver;
+
+    cfengine_hub::
+      "hub"   usebundle => role_cfengine_hub;
+}
