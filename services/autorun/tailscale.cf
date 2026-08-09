@@ -23,25 +23,12 @@ bundle agent tailscale
       if         => "tailscale_installed";
 
     "tailscale_keyring_missing"
-      not   => fileexists("$(keyring_path)"),
-      scope => "namespace";
+      not => fileexists("$(keyring_path)");
 
     "have_authkey"
-      expression => fileexists("$(authkey_local)"),
-      scope      => "namespace";
-
-    "need_tailscale_up"
-      expression => "tailscale_installed.!tailscale_connected.have_authkey",
-      scope      => "namespace";
+      expression => fileexists("$(authkey_local)");
 
   files:
-    "!tailscale_connected"::
-      "$(authkey_local)"
-        copy_from => remote_dcp("$(sys.workdir)/masterfiles/files/tailscale_authkey",
-                                @(def.policy_servers)),
-        perms     => mog("600", "root", "root"),
-        comment   => "Fetch Tailscale auth key from hub";
-
     "$(keyring_path)"
       perms => mog("644", "root", "root"),
       if    => fileexists("$(keyring_path)");
@@ -51,6 +38,14 @@ bundle agent tailscale
       content => "deb [signed-by=$(keyring_path)] https://pkgs.tailscale.com/stable/$(os_family) $(codename) main$(const.n)",
       classes => if_repaired("tailscale_source_updated"),
       if      => isvariable("os_family");
+
+    # Fetch auth key from hub whenever tailscale0 has no IP
+    "$(authkey_local)"
+      copy_from => remote_dcp("$(sys.workdir)/masterfiles/files/tailscale_authkey",
+                              @(def.policy_servers)),
+      perms     => mog("600", "root", "root"),
+      if        => not(returnszero("/bin/sh -c 'ip -4 addr show tailscale0 2>/dev/null | grep -q 100\\.'", "useshell")),
+      comment   => "Fetch Tailscale auth key from hub";
 
   packages:
     "!tailscale_keyring_missing"::
@@ -76,9 +71,11 @@ bundle agent tailscale
         contain => in_shell_and_silent,
         action  => if_elapsed(5);
 
-    need_tailscale_up::
+    # Shell one-liner: only runs tailscale up if not already connected
+    "tailscale_installed.have_authkey"::
       "/bin/sh"
-        args    => "-c 'tailscale up --authkey=$(cat $(authkey_local) | tr -d \"\\n\") --accept-routes'",
+        args    => "-c 'ip -4 addr show tailscale0 2>/dev/null | grep -q 100\\. || tailscale up --authkey=$(cat $(authkey_local) | tr -d \"\\n\") --accept-routes'",
         contain => in_shell,
+        action  => if_elapsed(60),
         comment => "Bootstrap Tailscale if not yet connected";
 }
