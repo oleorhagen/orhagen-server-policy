@@ -1,0 +1,11 @@
+bundle agent update_from_git
+{
+  vars:
+    "masterfiles" string => "/var/cfengine/masterfiles";
+
+  commands:
+    "/usr/bin/git"
+      args    => "-C $(masterfiles) pull --ff-only",
+      contain => in_shell_silent,
+      comment => "Pull latest policy from git remote";
+}
