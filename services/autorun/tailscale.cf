@@ -5,7 +5,7 @@ bundle agent tailscale
 
   vars:
     "keyring_path"  string => "/usr/share/keyrings/tailscale-archive-keyring.gpg";
-    "authkey_local" string => "/var/cfengine/tailscale_authkey";
+    "authkey_local" string => "/var/cfengine/inputs/files/tailscale_authkey.txt";
     "codename"      string => "$(sys.os_release[VERSION_CODENAME])";
 
     debian.!ubuntu::
@@ -40,8 +40,6 @@ bundle agent tailscale
       if      => isvariable("os_family");
 
     "$(authkey_local)"
-      copy_from => remote_dcp("$(sys.workdir)/masterfiles/files/tailscale_authkey",
-                              @(def.policy_servers)),
       perms     => mog("600", "root", "root"),
       if        => not(returnszero("/bin/sh -c 'ip -4 addr show tailscale0 2>/dev/null | grep -q 100\\.'", "useshell")),
       comment   => "Fetch Tailscale auth key from hub";
@@ -63,15 +61,10 @@ bundle agent tailscale
       classes => if_ok("tailscale_keyring_added"),
       if      => and("isvariable(os_family)", not(fileexists("$(keyring_path)")));
 
-    "/usr/bin/apt-get"
-      args    => "-q update",
-      contain => in_shell_and_silent,
-      action  => if_elapsed(5),
-      if      => or("tailscale_keyring_added", "tailscale_source_updated");
-
     "/bin/sh"
-      args    => "-c '[ -f /usr/bin/tailscale ] && [ -f $(authkey_local) ] && { ip -4 addr show tailscale0 2>/dev/null | grep -q 100\\. || tailscale up --authkey=$(cat $(authkey_local) | tr -d \"\\n\") --accept-routes; }'",
+      args    => "-c '[ -f /usr/bin/tailscale ] && { ip -4 addr show tailscale0 2>/dev/null | grep -q 100\\. || tailscale up --authkey=$(cat $(authkey_local) | tr -d \"\\n\") --accept-routes; }'",
       contain => in_shell,
       action  => if_elapsed(60),
+      if      => not("tailscale_installed"),
       comment => "Bootstrap Tailscale if not yet connected";
 }
