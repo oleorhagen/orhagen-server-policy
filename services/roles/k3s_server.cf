@@ -1,11 +1,14 @@
 bundle agent role_k3s_server
 {
+  vars:
+    "base_packages" slist => {
+      "open-iscsi",
+      "qemu-guest-agent",
+      "chrony",
+    };
+
   packages:
-    "open-iscsi"
-      policy => "present";
-    "qemu-guest-agent"
-      policy => "present";
-    "chrony"
+    "$(base_packages)"
       policy => "present";
 
   files:
