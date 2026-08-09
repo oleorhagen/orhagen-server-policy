@@ -1,0 +1,31 @@
+[Unit]
+Description=CFEngine Enterprise Webserver
+After=syslog.target
+{{#classes.mission_portal_http2_enabled}}
+Wants=cf-php-fpm.service
+After=cf-php-fpm.service
+{{/classes.mission_portal_http2_enabled}}
+{{^classes.mission_portal_http2_enabled}}
+Wants=cf-postgres.service
+After=cf-postgres.service
+{{/classes.mission_portal_http2_enabled}}
+ConditionPathExists={{{vars.sys.workdir}}}/httpd/bin/apachectl
+PartOf=cfengine3.service
+
+[Service]
+Type=forking
+ExecStart={{{vars.sys.workdir}}}/httpd/bin/apachectl start
+ExecStop={{{vars.sys.workdir}}}/httpd/bin/apachectl stop
+ExecReload={{{vars.sys.workdir}}}/httpd/bin/apachectl graceful
+PIDFile={{{vars.sys.workdir}}}/httpd/httpd.pid
+# ENT-11189: apachectl writes the PID file shortly after fork. On a busy host
+# (e.g. mid-upgrade with SELinux relabel, cf-postgres and cf-php-fpm churning)
+# the default 90s start timeout has been observed to fire while apache is still
+# coming up, leaving worker children bound to :80 and the unit in a restart loop.
+TimeoutStartSec=300
+Restart=always
+RestartSec=10
+UMask=0177
+
+[Install]
+WantedBy=multi-user.target

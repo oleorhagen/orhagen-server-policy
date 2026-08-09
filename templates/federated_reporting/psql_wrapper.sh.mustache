@@ -1,0 +1,45 @@
+#!/bin/bash
+
+# run an arbitrary psql command as cfpostgres user
+# expectation is that a line will be output with exit_code=<n>
+# this exit code <n> will then be used to exit
+# This design enables cfengine policy to run a commands promise
+# that can be kept, repaired or failed depending on an exit
+# code from psql since psql can't get different codes from scripts.
+
+if [ $# -ne 2 ]; then
+    echo "Usage: $0 [DBNAME] [SQL STRING]"
+    exit 2
+fi
+
+TMP=$(mktemp)
+cd /tmp
+
+# psql returns 2 when the connection to the server went bad, which can happen
+# transiently while postgres is being restarted. Retry a few times so that the
+# wrapper doesn't fail the promise just because postgres is briefly unavailable.
+MAX_ATTEMPTS=10
+ATTEMPT=1
+while : ; do
+    OUT=$(su - cfpostgres --command "{{{vars.sys.bindir}}}/psql --quiet --tuples-only --no-align --no-psqlrc \"$1\" --command=\"$2\"" 2> $TMP)
+    RETURN_CODE=$?
+    if [ $RETURN_CODE -ne 2 ] || [ $ATTEMPT -ge $MAX_ATTEMPTS ]; then
+        break
+    fi
+    ATTEMPT=$((ATTEMPT + 1))
+    sleep 3
+done
+
+ERR=$(<$TMP)
+
+EXIT_CODE=$(echo $OUT | awk -F= '{ if ( /exit_code/ ) print $2}')
+
+rm $TMP
+
+if [ $RETURN_CODE -ne 0 ]; then
+    echo "stdout: $OUT"
+    echo "stderr: $ERR"
+    exit 2; # failed
+fi
+
+exit $EXIT_CODE
