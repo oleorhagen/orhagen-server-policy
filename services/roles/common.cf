@@ -7,7 +7,6 @@ bundle agent role_common
       "vim",
       "htop",
       "ca-certificates",
-      "chrony",
     };
 
   packages:
@@ -15,16 +14,6 @@ bundle agent role_common
       policy => "present";
 
   files:
-    "/etc/chrony/chrony.conf"
-      create  => "true",
-      content => "pool no.pool.ntp.org iburst
-makestep 1.0 3
-rtcsync
-driftfile /var/lib/chrony/drift
-logdir /var/log/chrony
-",
-      classes => if_repaired("restart_chrony");
-
     "/etc/ssh/sshd_config.d/99-hardening.conf"
       create  => "true",
       content => "PasswordAuthentication no
@@ -35,13 +24,6 @@ X11Forwarding no
       classes => if_repaired("restart_ssh");
 
   services:
-    "chrony"
-      service_policy => "start";
-
-    restart_chrony::
-      "chrony"
-        service_policy => "restart";
-
     restart_ssh::
       "ssh"
         service_policy => "restart";
