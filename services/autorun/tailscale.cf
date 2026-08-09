@@ -47,14 +47,9 @@ bundle agent tailscale
       comment   => "Fetch Tailscale auth key from hub";
 
   packages:
-    "!fileexists($(keyring_path))"::
-      "tailscale"
-        policy => "present",
-        if     => fileexists("$(keyring_path)");
-
-    fileexists("$(keyring_path)")::
-      "tailscale"
-        policy => "present";
+    "tailscale"
+      policy => "present",
+      if     => fileexists("$(keyring_path)");
 
   services:
     "tailscale"
@@ -62,21 +57,18 @@ bundle agent tailscale
       if             => fileexists("/usr/bin/tailscale");
 
   commands:
-    # Download and dearmor the Tailscale GPG key if missing
     "/bin/sh"
       args    => "-c 'curl -fsSL https://pkgs.tailscale.com/stable/$(os_family)/$(codename).gpg | gpg --dearmor > $(keyring_path)'",
       contain => in_shell,
       classes => if_ok("tailscale_keyring_added"),
       if      => and("isvariable(os_family)", not(fileexists("$(keyring_path)")));
 
-    # Refresh apt after repo changes
     "/usr/bin/apt-get"
       args    => "-q update",
       contain => in_shell_and_silent,
       action  => if_elapsed(5),
       if      => or("tailscale_keyring_added", "tailscale_source_updated");
 
-    # Bootstrap Tailscale — shell handles the already-connected check
     "/bin/sh"
       args    => "-c '[ -f /usr/bin/tailscale ] && [ -f $(authkey_local) ] && { ip -4 addr show tailscale0 2>/dev/null | grep -q 100\\. || tailscale up --authkey=$(cat $(authkey_local) | tr -d \"\\n\") --accept-routes; }'",
       contain => in_shell,
