@@ -7,9 +7,10 @@ bundle agent update_from_git
     "masterfiles" string => "/var/cfengine/masterfiles";
 
   commands:
-    "$(paths.git)"
-      args    => "-C $(masterfiles) pull --ff-only",
-      contain => in_shell,
-      action  => if_elapsed(15),
-      comment => "Pull latest policy from GitHub every 15 minutes";
+    am_policy_hub::
+      "$(paths.git)"
+        args    => "-C $(masterfiles) pull --ff-only",
+        contain => in_shell,
+        action  => if_elapsed(15),
+        comment => "Pull latest policy from GitHub every 15 minutes (hub only)";
 }
