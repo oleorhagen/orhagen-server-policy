@@ -21,9 +21,9 @@ bundle agent tailscale
     "tailscale_installed"
       expression => fileexists("/usr/bin/tailscale");
 
-    # Safe to run unconditionally — returns false if tailscale0 has no 100.x IP
     "tailscale_connected"
-      expression => returnszero("/bin/sh -c 'ip -4 addr show tailscale0 2>/dev/null | grep -q 100\\.'", "useshell");
+      expression => returnszero("/bin/sh -c 'ip -4 addr show tailscale0 2>/dev/null | grep -q 100\\.'", "useshell"),
+      if         => "tailscale_installed";
 
     "tailscale_keyring_missing"
       not => fileexists("$(keyring_path)");
