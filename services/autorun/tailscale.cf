@@ -81,5 +81,6 @@ bundle agent tailscale
       "/usr/bin/tailscale"
         args    => "up --authkey=$(authkey) --accept-routes",
         contain => in_shell,
+        if      => isvariable("authkey"),
         comment => "Bootstrap Tailscale if not yet connected";
 }
