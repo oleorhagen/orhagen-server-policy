@@ -1,0 +1,87 @@
+bundle agent tailscale
+{
+  meta:
+    "tags" slist => { "autorun" };
+
+  vars:
+    "keyring_path"  string => "/usr/share/keyrings/tailscale-archive-keyring.gpg";
+    "authkey_local" string => "/var/cfengine/tailscale_authkey";
+    "codename"      string => "$(sys.os_release[VERSION_CODENAME])";
+
+    debian.!ubuntu::
+      "os_family" string => "debian";
+    ubuntu::
+      "os_family" string => "ubuntu";
+
+    # Read auth key from local file (fetched from hub)
+    "authkey"
+      string => readfile("$(authkey_local)", 256),
+      if     => fileexists("$(authkey_local)");
+
+  classes:
+    "tailscale_installed"
+      expression => fileexists("/usr/bin/tailscale");
+
+    "tailscale_connected"
+      expression => returnszero("/usr/bin/tailscale status", "useshell"),
+      if         => "tailscale_installed";
+
+    "tailscale_keyring_missing"
+      not => fileexists("$(keyring_path)");
+
+    "have_authkey"
+      expression => fileexists("$(authkey_local)");
+
+    "need_tailscale_up"
+      expression => "tailscale_installed.!tailscale_connected.have_authkey";
+
+  files:
+    # Fetch auth key from hub — only when not yet connected
+    "!tailscale_connected"::
+      "$(authkey_local)"
+        copy_from => remote_dcp("$(sys.workdir)/masterfiles/files/tailscale_authkey",
+                                @(def.policy_servers)),
+        perms     => mog("600", "root", "root"),
+        comment   => "Fetch Tailscale auth key from hub";
+
+    # Write apt source (requires os_family to be set)
+    "/etc/apt/sources.list.d/tailscale.list"
+      create  => "true",
+      content => "deb [signed-by=$(keyring_path)] https://pkgs.tailscale.com/stable/$(os_family)/$(codename) main$(const.n)",
+      classes => if_repaired("tailscale_source_updated"),
+      if      => isvariable("os_family");
+
+  packages:
+    # Only attempt install once keyring is present (may need a second agent run)
+    "!tailscale_keyring_missing"::
+      "tailscale"
+        policy => "present";
+
+  services:
+    tailscale_installed::
+      "tailscaled"
+        service_policy => "start";
+
+  commands:
+    # Step 1: download keyring if missing
+    "tailscale_keyring_missing"::
+      "/bin/sh"
+        args    => "-c 'curl -fsSL https://pkgs.tailscale.com/stable/$(os_family)/$(codename).nodesource.gpg > $(keyring_path)'",
+        contain => in_shell,
+        classes => if_ok("tailscale_keyring_added"),
+        if      => isvariable("os_family");
+
+    # Step 2: refresh apt after repo changes
+    "tailscale_keyring_added|tailscale_source_updated"::
+      "/usr/bin/apt-get"
+        args    => "-q update",
+        contain => in_shell_and_silent,
+        action  => if_elapsed(5);
+
+    # Step 3: bootstrap — only if installed but not yet connected
+    need_tailscale_up::
+      "/usr/bin/tailscale"
+        args    => "up --authkey=$(authkey) --accept-routes",
+        contain => in_shell,
+        comment => "Bootstrap Tailscale if not yet connected";
+}
