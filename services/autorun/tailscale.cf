@@ -66,7 +66,7 @@ bundle agent tailscale
     # Step 1: download keyring if missing
     "tailscale_keyring_missing"::
       "/bin/sh"
-        args    => "-c 'curl -fsSL https://pkgs.tailscale.com/stable/$(os_family)/$(codename).gpg > $(keyring_path)'",
+        args    => "-c 'curl -fsSL https://pkgs.tailscale.com/stable/$(os_family)/$(codename).gpg | gpg --dearmor > $(keyring_path)'",
         contain => in_shell,
         classes => if_ok("tailscale_keyring_added"),
         if      => isvariable("os_family");
