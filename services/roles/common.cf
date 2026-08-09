@@ -14,6 +14,10 @@ bundle agent role_common
       policy => "present";
 
   files:
+    "/etc/hosts"
+      edit_line => hosts_entries,
+      comment   => "Ensure all cluster nodes are resolvable by hostname";
+
     "/etc/ssh/sshd_config.d/99-hardening.conf"
       create  => "true",
       content => "PasswordAuthentication no
@@ -27,4 +31,14 @@ X11Forwarding no
     restart_ssh::
       "ssh"
         service_policy => "restart";
+}
+
+bundle edit_line hosts_entries
+{
+  insert_lines:
+    "10.10.10.2   orhagen-no-server.orhagen.no orhagen-no-server";
+    "10.10.10.100 postgresql-server-turnkey.orhagen.no postgresql-server-turnkey";
+    "10.10.10.101 fileserver-turnkey.orhagen.no fileserver-turnkey";
+    "10.10.10.104 pve-backup.orhagen.no pve-backup";
+    "10.10.10.105 cfengine-hub.orhagen.no cfengine-hub";
 }
