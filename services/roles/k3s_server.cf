@@ -3,6 +3,8 @@ bundle agent role_k3s_server
   packages:
     "open-iscsi"
       policy => "present";
+    "qemu-guest-agent"
+      policy => "present";
 
   files:
     "/etc/sysctl.d/99-k3s.conf"
@@ -12,6 +14,10 @@ net.bridge.bridge-nf-call-iptables=1
 net.bridge.bridge-nf-call-ip6tables=1
 ",
       classes => if_repaired("reload_sysctl");
+
+  services:
+    "qemu-guest-agent"
+      service_policy => "start";
 
   commands:
     reload_sysctl::
