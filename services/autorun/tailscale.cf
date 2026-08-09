@@ -21,8 +21,9 @@ bundle agent tailscale
     "tailscale_installed"
       expression => fileexists("/usr/bin/tailscale");
 
+    # Check for a 100.x Tailscale IP — status exits 0 even when logged out
     "tailscale_connected"
-      expression => returnszero("/usr/bin/tailscale status", "useshell"),
+      expression => returnszero("/bin/sh -c 'ip -4 addr show tailscale0 2>/dev/null | grep -q 100\\.'", "useshell"),
       if         => "tailscale_installed";
 
     "tailscale_keyring_missing"
@@ -42,7 +43,6 @@ bundle agent tailscale
         perms     => mog("600", "root", "root"),
         comment   => "Fetch Tailscale auth key from hub";
 
-    # Keyring must be world-readable for apt to verify signatures
     "$(keyring_path)"
       perms => mog("644", "root", "root"),
       if    => fileexists("$(keyring_path)");
@@ -77,10 +77,9 @@ bundle agent tailscale
         contain => in_shell_and_silent,
         action  => if_elapsed(5);
 
-    need_tailscale_up::
+    "need_tailscale_up.isvariable(authkey)"::
       "/usr/bin/tailscale"
         args    => "up --authkey=$(authkey) --accept-routes",
         contain => in_shell,
-        if      => isvariable("authkey"),
         comment => "Bootstrap Tailscale if not yet connected";
 }
