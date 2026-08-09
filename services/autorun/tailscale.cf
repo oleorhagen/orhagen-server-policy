@@ -39,7 +39,6 @@ bundle agent tailscale
       classes => if_repaired("tailscale_source_updated"),
       if      => isvariable("os_family");
 
-    # Fetch auth key from hub whenever tailscale0 has no IP
     "$(authkey_local)"
       copy_from => remote_dcp("$(sys.workdir)/masterfiles/files/tailscale_authkey",
                               @(def.policy_servers)),
@@ -48,34 +47,39 @@ bundle agent tailscale
       comment   => "Fetch Tailscale auth key from hub";
 
   packages:
-    "!tailscale_keyring_missing"::
+    "!fileexists($(keyring_path))"::
+      "tailscale"
+        policy => "present",
+        if     => fileexists("$(keyring_path)");
+
+    fileexists("$(keyring_path)")::
       "tailscale"
         policy => "present";
 
   services:
-    tailscale_installed::
-      "tailscaled"
-        service_policy => "start";
+    "tailscale"
+      service_policy => "start",
+      if             => fileexists("/usr/bin/tailscale");
 
   commands:
-    tailscale_keyring_missing::
-      "/bin/sh"
-        args    => "-c 'curl -fsSL https://pkgs.tailscale.com/stable/$(os_family)/$(codename).gpg | gpg --dearmor > $(keyring_path)'",
-        contain => in_shell,
-        classes => if_ok("tailscale_keyring_added"),
-        if      => isvariable("os_family");
+    # Download and dearmor the Tailscale GPG key if missing
+    "/bin/sh"
+      args    => "-c 'curl -fsSL https://pkgs.tailscale.com/stable/$(os_family)/$(codename).gpg | gpg --dearmor > $(keyring_path)'",
+      contain => in_shell,
+      classes => if_ok("tailscale_keyring_added"),
+      if      => and("isvariable(os_family)", not(fileexists("$(keyring_path)")));
 
-    "tailscale_keyring_added|tailscale_source_updated"::
-      "/usr/bin/apt-get"
-        args    => "-q update",
-        contain => in_shell_and_silent,
-        action  => if_elapsed(5);
+    # Refresh apt after repo changes
+    "/usr/bin/apt-get"
+      args    => "-q update",
+      contain => in_shell_and_silent,
+      action  => if_elapsed(5),
+      if      => or("tailscale_keyring_added", "tailscale_source_updated");
 
-    # Shell one-liner: only runs tailscale up if not already connected
-    "tailscale_installed.have_authkey"::
-      "/bin/sh"
-        args    => "-c 'ip -4 addr show tailscale0 2>/dev/null | grep -q 100\\. || tailscale up --authkey=$(cat $(authkey_local) | tr -d \"\\n\") --accept-routes'",
-        contain => in_shell,
-        action  => if_elapsed(60),
-        comment => "Bootstrap Tailscale if not yet connected";
+    # Bootstrap Tailscale — shell handles the already-connected check
+    "/bin/sh"
+      args    => "-c '[ -f /usr/bin/tailscale ] && [ -f $(authkey_local) ] && { ip -4 addr show tailscale0 2>/dev/null | grep -q 100\\. || tailscale up --authkey=$(cat $(authkey_local) | tr -d \"\\n\") --accept-routes; }'",
+      contain => in_shell,
+      action  => if_elapsed(60),
+      comment => "Bootstrap Tailscale if not yet connected";
 }
