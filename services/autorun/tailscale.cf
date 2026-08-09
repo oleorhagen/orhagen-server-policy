@@ -13,10 +13,6 @@ bundle agent tailscale
     ubuntu::
       "os_family" string => "ubuntu";
 
-    "authkey"
-      string => readfile("$(authkey_local)", 256),
-      if     => fileexists("$(authkey_local)");
-
   classes:
     "tailscale_installed"
       expression => fileexists("/usr/bin/tailscale");
@@ -31,11 +27,8 @@ bundle agent tailscale
     "have_authkey"
       expression => fileexists("$(authkey_local)");
 
-    "have_authkey_var"
-      expression => isvariable("authkey");
-
     "need_tailscale_up"
-      expression => "tailscale_installed.!tailscale_connected.have_authkey.have_authkey_var";
+      expression => "tailscale_installed.!tailscale_connected.have_authkey";
 
   files:
     "!tailscale_connected"::
@@ -79,9 +72,10 @@ bundle agent tailscale
         contain => in_shell_and_silent,
         action  => if_elapsed(5);
 
+    # Read key directly from file to avoid variable resolution timing issues
     need_tailscale_up::
-      "/usr/bin/tailscale"
-        args    => "up --authkey=$(authkey) --accept-routes",
+      "/bin/sh"
+        args    => "-c 'tailscale up --authkey=$(tr -d \"\\n\" < $(authkey_local)) --accept-routes'",
         contain => in_shell,
         comment => "Bootstrap Tailscale if not yet connected";
 }
