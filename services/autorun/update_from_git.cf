@@ -4,8 +4,8 @@ bundle agent update_from_git
     "masterfiles" string => "/var/cfengine/masterfiles";
 
   commands:
-    "/usr/bin/git"
+    "$(paths.git)"
       args    => "-C $(masterfiles) pull --ff-only",
-      contain => in_shell_silent,
+      contain => in_shell,
       comment => "Pull latest policy from git remote";
 }

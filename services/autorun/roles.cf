@@ -1,11 +1,11 @@
-body file_control
+body file control
 {
   inputs => {
-    "$(this.promise_dirname)/../roles/common.cf",
-    "$(this.promise_dirname)/../roles/k3s_server.cf",
-    "$(this.promise_dirname)/../roles/database.cf",
-    "$(this.promise_dirname)/../roles/fileserver.cf",
-    "$(this.promise_dirname)/../roles/cfengine_hub.cf",
+    "services/roles/common.cf",
+    "services/roles/k3s_server.cf",
+    "services/roles/database.cf",
+    "services/roles/fileserver.cf",
+    "services/roles/cfengine_hub.cf",
   };
 }
 
