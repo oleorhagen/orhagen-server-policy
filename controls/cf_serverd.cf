@@ -249,6 +249,12 @@ bundle server mpf_default_access_rules()
         comment => "Grant access to the agent (for cf-runagent)",
         admit => { @(def.policy_servers) };
 
+  access:
+    "$(sys.workdir)/masterfiles/files/tailscale_authkey"
+      handle  => "server_access_grant_tailscale_authkey",
+      comment => "Allow managed nodes to fetch Tailscale auth key",
+      admit   => { @(def.acl_derived) };
+
   roles:
     # Use roles to allow specific remote cf-runagent users to
     # define certain soft-classes when running cf-agent on this host
