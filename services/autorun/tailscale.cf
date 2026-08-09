@@ -21,7 +21,6 @@ bundle agent tailscale
     "tailscale_installed"
       expression => fileexists("/usr/bin/tailscale");
 
-    # Check for a 100.x Tailscale IP — status exits 0 even when logged out
     "tailscale_connected"
       expression => returnszero("/bin/sh -c 'ip -4 addr show tailscale0 2>/dev/null | grep -q 100\\.'", "useshell"),
       if         => "tailscale_installed";
@@ -32,8 +31,11 @@ bundle agent tailscale
     "have_authkey"
       expression => fileexists("$(authkey_local)");
 
+    "have_authkey_var"
+      expression => isvariable("authkey");
+
     "need_tailscale_up"
-      expression => "tailscale_installed.!tailscale_connected.have_authkey";
+      expression => "tailscale_installed.!tailscale_connected.have_authkey.have_authkey_var";
 
   files:
     "!tailscale_connected"::
@@ -77,7 +79,7 @@ bundle agent tailscale
         contain => in_shell_and_silent,
         action  => if_elapsed(5);
 
-    "need_tailscale_up.isvariable(authkey)"::
+    need_tailscale_up::
       "/usr/bin/tailscale"
         args    => "up --authkey=$(authkey) --accept-routes",
         contain => in_shell,
