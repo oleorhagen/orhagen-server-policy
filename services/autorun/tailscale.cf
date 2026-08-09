@@ -15,20 +15,24 @@ bundle agent tailscale
 
   classes:
     "tailscale_installed"
-      expression => fileexists("/usr/bin/tailscale");
+      expression => fileexists("/usr/bin/tailscale"),
+      scope      => "namespace";
 
     "tailscale_connected"
       expression => returnszero("/bin/sh -c 'ip -4 addr show tailscale0 2>/dev/null | grep -q 100\\.'", "useshell"),
       if         => "tailscale_installed";
 
     "tailscale_keyring_missing"
-      not => fileexists("$(keyring_path)");
+      not   => fileexists("$(keyring_path)"),
+      scope => "namespace";
 
     "have_authkey"
-      expression => fileexists("$(authkey_local)");
+      expression => fileexists("$(authkey_local)"),
+      scope      => "namespace";
 
     "need_tailscale_up"
-      expression => "tailscale_installed.!tailscale_connected.have_authkey";
+      expression => "tailscale_installed.!tailscale_connected.have_authkey",
+      scope      => "namespace";
 
   files:
     "!tailscale_connected"::
@@ -72,10 +76,9 @@ bundle agent tailscale
         contain => in_shell_and_silent,
         action  => if_elapsed(5);
 
-    # Read key directly from file to avoid variable resolution timing issues
     need_tailscale_up::
       "/bin/sh"
-        args    => "-c 'tailscale up --authkey=$(tr -d \"\\n\" < $(authkey_local)) --accept-routes'",
+        args    => "-c 'tailscale up --authkey=$(cat $(authkey_local) | tr -d \"\\n\") --accept-routes'",
         contain => in_shell,
         comment => "Bootstrap Tailscale if not yet connected";
 }
