@@ -4,7 +4,6 @@ bundle agent role_k3s_server
     "base_packages" slist => {
       "open-iscsi",
       "qemu-guest-agent",
-      "chrony",
     };
 
   packages:
@@ -12,16 +11,6 @@ bundle agent role_k3s_server
       policy => "present";
 
   files:
-    "/etc/chrony/chrony.conf"
-      create  => "true",
-      content => "pool no.pool.ntp.org iburst
-makestep 1.0 3
-rtcsync
-driftfile /var/lib/chrony/drift
-logdir /var/log/chrony
-",
-      classes => if_repaired("restart_chrony");
-
     "/etc/sysctl.d/99-k3s.conf"
       create  => "true",
       content => "net.ipv4.ip_forward=1
@@ -33,13 +22,6 @@ net.bridge.bridge-nf-call-ip6tables=1
   services:
     "qemu-guest-agent"
       service_policy => "start";
-
-    "chrony"
-      service_policy => "start";
-
-    restart_chrony::
-      "chrony"
-        service_policy => "restart";
 
   commands:
     reload_sysctl::

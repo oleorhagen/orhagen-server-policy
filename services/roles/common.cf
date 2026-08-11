@@ -7,6 +7,8 @@ bundle agent role_common
       "vim",
       "htop",
       "ca-certificates",
+      "chrony",
+      "fail2ban",
     };
 
   packages:
@@ -37,9 +39,43 @@ X11Forwarding no
 ",
       classes => if_repaired("restart_ssh");
 
+    "/etc/chrony/chrony.conf"
+      create  => "true",
+      content => "pool no.pool.ntp.org iburst
+makestep 1.0 3
+rtcsync
+driftfile /var/lib/chrony/drift
+logdir /var/log/chrony
+",
+      classes => if_repaired("restart_chrony");
+
+    "/etc/fail2ban/jail.local"
+      create  => "true",
+      content => "[DEFAULT]
+bantime  = 1h
+findtime = 10m
+maxretry = 5
+
+[sshd]
+enabled = true
+",
+      classes => if_repaired("restart_fail2ban");
+
   services:
     restart_ssh::
       "ssh"
+        service_policy => "restart";
+
+    "chrony"
+      service_policy => "start";
+    restart_chrony::
+      "chrony"
+        service_policy => "restart";
+
+    "fail2ban"
+      service_policy => "start";
+    restart_fail2ban::
+      "fail2ban"
         service_policy => "restart";
 }
 
