@@ -37,13 +37,6 @@ X11Forwarding no
 ",
       classes => if_repaired("restart_ssh");
 
-  commands:
-    Hr00::
-      "/bin/sh"
-        args    => "-c 'DEBIAN_FRONTEND=noninteractive apt-get -q -y update && DEBIAN_FRONTEND=noninteractive apt-get -q -y dist-upgrade'",
-        action  => if_elapsed(1440),
-        comment => "Update all packages once per day during the midnight hour";
-
   services:
     restart_ssh::
       "ssh"

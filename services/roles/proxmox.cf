@@ -1,0 +1,116 @@
+bundle agent role_proxmox
+# @brief Proxmox VE host: network and cluster configuration
+#
+# Scaffold only — fill in real bridge names, IPs, and cluster details
+# before relying on this. Notes:
+#   - /etc/network/interfaces is safe to manage directly with files/edit_line.
+#   - /etc/pve/* (including corosync.conf) is a pmxcfs FUSE mount backed by
+#     the cluster database; don't hand-edit it with CFEngine. Cluster join/
+#     leave should go through `pvecm` commands, not file promises.
+{
+  vars:
+    "network_interfaces_path"
+      string => "/etc/network/interfaces";
+
+  files:
+    "$(network_interfaces_path)"
+      create    => "true",
+      edit_line => proxmox_network_interfaces,
+      comment   => "Manage vmbr bridges and physical uplinks";
+
+  commands:
+    somechange::
+      "/usr/sbin/ifreload"
+        args    => "-a",
+        comment => "Apply network changes without a reboot (ifupdown2 only)";
+}
+
+bundle edit_line proxmox_network_interfaces
+{
+   insert_lines:
+     "
+auto lo
+iface lo inet loopback
+
+auto eno1
+iface eno1 inet static
+	address 185.35.202.246/26
+	gateway 185.35.202.193
+
+auto vmbr0
+#private sub network
+iface vmbr0 inet static
+        address  10.10.10.1/24
+        bridge-ports none
+        bridge-stp off
+        bridge-fd 0
+
+        post-up   echo 1 > /proc/sys/net/ipv4/ip_forward
+        post-up   iptables -t nat -A POSTROUTING -s '10.10.10.0/24' -o eno1 -j MASQUERADE
+        post-down iptables -t nat -D POSTROUTING -s '10.10.10.0/24' -o eno1 -j MASQUERADE
+
+	# Port forward port 80
+	# post-up iptables -t nat -A PREROUTING -i vmbr0 -p tcp --dport 80 -j DNAT --to 10.0.1.xxx:80
+	# post-down iptables -t nat -D PREROUTING -i vmbr0 -p tcp --dport 80 -j DNAT --to 10.0.1.xxx:80
+
+	# HTTP
+        post-up iptables --table nat --append PREROUTING --in-interface eno1 --protocol tcp --dport 80 --jump DNAT --to 10.10.10.2:80
+        post-down iptables --table nat --delete PREROUTING --in-interface eno1 --protocol tcp --dport 80 --jump DNAT --to 10.10.10.2:80
+
+	# HTTPS
+        post-up iptables --table nat --append PREROUTING --in-interface eno1 --protocol tcp --dport 443 --jump DNAT --to 10.10.10.2:443
+        post-down iptables --table nat --delete PREROUTING --in-interface eno1 --protocol tcp --dport 443 --jump DNAT --to 10.10.10.2:443
+
+	# DNS (TCP)
+        post-up iptables --table nat --append PREROUTING --in-interface eno1 --protocol tcp --dport 53 --jump DNAT --to 10.10.10.2:53
+        post-down iptables --table nat --delete PREROUTING --in-interface eno1 --protocol tcp --dport 53 --jump DNAT --to 10.10.10.2:53
+
+	# DNS (UDP)
+        post-up iptables --table nat --append PREROUTING --in-interface eno1 --protocol udp --dport 53 --jump DNAT --to 10.10.10.2:53
+        post-down iptables --table nat --delete PREROUTING --in-interface eno1 --protocol udp --dport 53 --jump DNAT --to 10.10.10.2:53
+
+	# Minio S3 (API)
+        post-up iptables --table nat --append PREROUTING --in-interface eno1 --protocol tcp --dport 9000 --jump DNAT --to 10.10.10.2:9000
+        post-down iptables --table nat --delete PREROUTING --in-interface eno1 --protocol tcp --dport 9000 --jump DNAT --to 10.10.10.2:9000
+
+	# K8s ports
+        #post-up iptables --table nat --append PREROUTING --in-interface eno1 --protocol tcp --dport 6443 --jump DNAT --to 10.10.10.2:6443
+        #post-down iptables --table nat --delete PREROUTING --in-interface eno1 --protocol tcp --dport 6443 --jump DNAT --to 10.10.10.2:6443
+
+	## kubelet metrics
+        post-up iptables --table nat --append PREROUTING --in-interface eno1 --protocol tcp --dport 10250 --jump DNAT --to 10.10.10.2:10250
+        post-down iptables --table nat --delete PREROUTING --in-interface eno1 --protocol tcp --dport 10250 --jump DNAT --to 10.10.10.2:10250
+
+	## Minio admin client
+        post-up iptables --table nat --append PREROUTING --in-interface eno1 --protocol tcp --dport 9000 --jump DNAT --to 10.10.10.2:9000
+        post-down iptables --table nat --delete PREROUTING --in-interface eno1 --protocol tcp --dport 9000 --jump DNAT --to 10.10.10.2:9000
+
+	## postgresql
+        post-up iptables --table nat --append PREROUTING --in-interface eno1 --protocol tcp --dport 5432 --jump DNAT --to 10.10.10.100:5432
+        post-down iptables --table nat --delete PREROUTING --in-interface eno1 --protocol tcp --dport 5432 --jump DNAT --to 10.10.10.100:5432
+
+
+	## Samba fileserver
+        post-up iptables --table nat --append PREROUTING --in-interface eno1 --protocol tcp --dport 445 --jump DNAT --to 10.10.10.101:445
+        post-down iptables --table nat --delete PREROUTING --in-interface eno1 --protocol tcp --dport 445 --jump DNAT --to 10.10.10.101:445
+
+	## NFS fileserver
+	###
+	## NFS fileserver (RPC portmapper - required for NFS)
+	post-up iptables --table nat --append PREROUTING --in-interface eno1 --protocol tcp --dport 111 --jump DNAT --to 10.10.10.101:111
+	post-up iptables --table nat --append PREROUTING --in-interface eno1 --protocol udp --dport 111 --jump DNAT --to 10.10.10.101:111
+	post-down iptables --table nat --delete PREROUTING --in-interface eno1 --protocol tcp --dport 111 --jump DNAT --to 10.10.10.101:111
+	post-down iptables --table nat --delete PREROUTING --in-interface eno1 --protocol udp --dport 111 --jump DNAT --to 10.10.10.101:111
+
+	## NFS fileserver (main NFS port)
+	post-up iptables --table nat --append PREROUTING --in-interface eno1 --protocol tcp --dport 2049 --jump DNAT --to 10.10.10.101:2049
+	post-up iptables --table nat --append PREROUTING --in-interface eno1 --protocol udp --dport 2049 --jump DNAT --to 10.10.10.101:2049
+	post-down iptables --table nat --delete PREROUTING --in-interface eno1 --protocol tcp --dport 2049 --jump DNAT --to 10.10.10.101:2049
+	post-down iptables --table nat --delete PREROUTING --in-interface eno1 --protocol udp --dport 2049 --jump DNAT --to 10.10.10.101:2049
+
+iface wlp0s20f3 inet manual
+
+
+source /etc/network/interfaces.d/*
+";
+}
