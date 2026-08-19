@@ -62,7 +62,7 @@ bundle agent tailscale
       if      => and(isvariable("os_family"), not(fileexists("$(keyring_path)")));
 
     "/bin/sh"
-      args    => "-c '[ -f /usr/bin/tailscale ] && { ip -4 addr show tailscale0 2>/dev/null | grep -q 100\\. || tailscale up --authkey=$(cat $(authkey_local) | tr -d \"\\n\") --accept-routes; }'",
+      args    => "tailscale up --authkey=file:$(authkey_local) --accept-routes",
       contain => in_shell,
       action  => if_elapsed(60),
       if      => not("tailscale_installed"),
