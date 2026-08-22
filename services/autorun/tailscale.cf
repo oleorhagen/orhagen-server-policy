@@ -42,7 +42,6 @@ bundle agent tailscale
     "$(authkey_local)"
       perms     => mog("600", "root", "root"),
       if        => not(returnszero("/bin/sh -c 'ip -4 addr show tailscale0 2>/dev/null | grep -q 100\\.'", "useshell")),
-      classes   => if_ok("tailscale_up"),
       comment   => "Fetch Tailscale auth key from hub";
 
   packages:
@@ -62,9 +61,9 @@ bundle agent tailscale
       classes => if_ok("tailscale_keyring_added"),
       if      => and(isvariable("os_family"), not(fileexists("$(keyring_path)")));
 
-    "/usr/bin/tailscale up --authkey=file:$(authkey_local) --accept-routes",
+    "/usr/bin/tailscale up --authkey=file:$(authkey_local) --accept-routes"
       action  => if_elapsed(60),
-      if      => not("tailscale_up"),
+      if      => not("tailscale_connected"),
       comment => "Bootstrap Tailscale if not yet connected";
 
   reports:
