@@ -61,10 +61,15 @@ bundle agent tailscale
       classes => if_ok("tailscale_keyring_added"),
       if      => and(isvariable("os_family"), not(fileexists("$(keyring_path)")));
 
-    "/bin/sh"
-      args    => "tailscale up --authkey=file:$(authkey_local) --accept-routes",
-      contain => in_shell,
+    "/usr/bin/tailscale up --authkey=file:$(authkey_local) --accept-routes",
       action  => if_elapsed(60),
       if      => not("tailscale_installed"),
       comment => "Bootstrap Tailscale if not yet connected";
+
+  reports:
+    "DEBUG $(this.bundle): tailscale keyring added"
+      if => "tailscale_keyring_added";
+
+    "DEBUG $(this.bundle): tailscale keyring added"
+      if => "!tailscale_keyring_added";
 }
