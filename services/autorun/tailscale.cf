@@ -48,6 +48,11 @@ bundle agent tailscale
       if        => not(returnszero("/bin/sh -c 'ip -4 addr show tailscale0 2>/dev/null | grep -q 100\\.'", "useshell")),
       comment   => "Fetch Tailscale auth key from hub";
 
+    is_lxc::
+      "/etc/default/tailscaled"
+        edit_line => default_container_networking,
+        comment   => "In containers we can't use tun networking";
+
   packages:
     "tailscale"
       policy => "present",
@@ -76,4 +81,12 @@ bundle agent tailscale
 
     "DEBUG $(this.bundle): tailscale keyring added"
       if => "!tailscale_keyring_added";
+}
+
+bundle edit_line default_container_networking
+{
+  insert_lines:
+    "
+FLAGS=\"--tun=userspace-networking\"
+";
 }
