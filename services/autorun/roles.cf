@@ -3,7 +3,7 @@ body file control
   inputs => {
     "services/roles/common.cf",
     "services/roles/vm.cf",
-    "sevices/common_classes.cf",
+    "services/common_classes.cf",
     "services/roles/k3s_server.cf",
     "services/roles/database.cf",
     "services/roles/fileserver.cf",
