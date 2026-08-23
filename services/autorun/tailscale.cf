@@ -28,6 +28,10 @@ bundle agent tailscale
     "have_authkey"
       expression => fileexists("$(authkey_local)");
 
+     "is_lxc"
+       expression => fileexists("/run/systemd/container"),
+       comment => "Host is running inside a systemd-detected container";
+
   files:
     "$(keyring_path)"
       perms => mog("644", "root", "root"),
