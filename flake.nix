@@ -11,18 +11,24 @@
       let
         pkgs = import nixpkgs { inherit system; };
 
-        python = pkgs.python3.withPackages (ps: with ps; [
-          # fill in your pip packages here, e.g.:
-          # requests
-          # numpy
-          cfengine
-          cfbs
-          cf-remote
-        ]);
+        # fill in your pip (PyPI) packages here, e.g.:
+        pipPackages = [
+          "cfengine"
+          "cfbs"
+          "cf-remote"
+        ];
       in
       {
         devShells.default = pkgs.mkShell {
-          packages = [ python ];
+          packages = [ pkgs.python3 ];
+
+          shellHook = ''
+            if [ ! -d .venv ]; then
+              python3 -m venv .venv
+            fi
+            source .venv/bin/activate
+            pip install --quiet ${pkgs.lib.escapeShellArgs pipPackages}
+          '';
         };
       });
 }
