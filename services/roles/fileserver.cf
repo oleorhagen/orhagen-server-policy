@@ -1,8 +1,6 @@
 bundle agent role_fileserver
 {
   packages:
-    "nfs-kernel-server"
-      policy => "present";
-    "samba"
-      policy => "present";
+    "nfs-kernel-server" policy => "present";
+    "samba" policy => "present";
 }

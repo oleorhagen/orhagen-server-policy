@@ -9,24 +9,20 @@ bundle agent role_proxmox
 #     leave should go through `pvecm` commands, not file promises.
 {
   vars:
-    "network_interfaces_path"
-      string => "/etc/network/interfaces";
+    "network_interfaces_path" string => "/etc/network/interfaces";
 
   packages:
-    "auditd"
-      policy => "present";
-
-    "unattended-upgrades"
-      policy => "present";
+    "auditd" policy => "present";
+    "unattended-upgrades" policy => "present";
 
   files:
     "$(network_interfaces_path)"
-      create    => "true",
+      create => "true",
       edit_line => proxmox_network_interfaces,
-      comment   => "Manage vmbr bridges and physical uplinks";
+      comment => "Manage vmbr bridges and physical uplinks";
 
     "/etc/apt/apt.conf.d/20auto-upgrades"
-      create  => "true",
+      create => "true",
       content => "APT::Periodic::Update-Package-Lists \"1\";
 APT::Periodic::Unattended-Upgrade \"1\";
 ",
@@ -36,20 +32,19 @@ APT::Periodic::Unattended-Upgrade \"1\";
                   as shipped rather than overridden here";
 
   services:
-    "auditd"
-      service_policy => "start";
+    "auditd" service_policy => "start";
 
   commands:
     somechange::
       "/usr/sbin/ifreload"
-        args    => "-a",
+        args => "-a",
         comment => "Apply network changes without a reboot (ifupdown2 only)";
 }
 
 bundle edit_line proxmox_network_interfaces
 {
-   insert_lines:
-     "
+  insert_lines:
+    "
 auto lo
 iface lo inet loopback
 

@@ -1,37 +1,31 @@
 bundle agent role_common
 {
   vars:
-    "base_packages" slist => {
-      "curl",
-      "wget",
-      "vim",
-      "htop",
-      "ca-certificates",
-      "chrony",
-      "fail2ban",
-    };
+    "base_packages"
+      slist => {
+        "curl", "wget", "vim", "htop", "ca-certificates", "chrony", "fail2ban",
+      };
 
   packages:
-    "$(base_packages)"
-      policy => "present";
+    "$(base_packages)" policy => "present";
 
   files:
     "/etc/hosts"
       edit_line => hosts_entries,
-      comment   => "Ensure all cluster nodes are resolvable by hostname";
+      comment => "Ensure all cluster nodes are resolvable by hostname";
 
     "/root/.ssh/."
       create => "true",
-      perms  => mog("700", "root", "root");
+      perms => mog("700", "root", "root");
 
     "/root/.ssh/authorized_keys"
-      create    => "true",
-      perms     => mog("600", "root", "root"),
+      create => "true",
+      perms => mog("600", "root", "root"),
       edit_line => authorized_keys_entries,
-      comment   => "Ensure admin SSH key is present on all nodes";
+      comment => "Ensure admin SSH key is present on all nodes";
 
     "/etc/ssh/sshd_config.d/99-hardening.conf"
-      create  => "true",
+      create => "true",
       content => "PasswordAuthentication no
 PermitRootLogin prohibit-password
 MaxAuthTries 3
@@ -40,7 +34,7 @@ X11Forwarding no
       classes => if_repaired("restart_ssh");
 
     "/etc/chrony/chrony.conf"
-      create  => "true",
+      create => "true",
       content => "pool no.pool.ntp.org iburst
 makestep 1.0 3
 rtcsync
@@ -50,7 +44,7 @@ logdir /var/log/chrony
       classes => if_repaired("restart_chrony");
 
     "/etc/fail2ban/jail.local"
-      create  => "true",
+      create => "true",
       content => "[DEFAULT]
 bantime  = 1h
 findtime = 10m
@@ -63,20 +57,15 @@ enabled = true
 
   services:
     restart_ssh::
-      "ssh"
-        service_policy => "restart";
+      "ssh" service_policy => "restart";
+      "chrony" service_policy => "start";
 
-    "chrony"
-      service_policy => "start";
     restart_chrony::
-      "chrony"
-        service_policy => "restart";
+      "chrony" service_policy => "restart";
+      "fail2ban" service_policy => "start";
 
-    "fail2ban"
-      service_policy => "start";
     restart_fail2ban::
-      "fail2ban"
-        service_policy => "restart";
+      "fail2ban" service_policy => "restart";
 }
 
 bundle edit_line hosts_entries

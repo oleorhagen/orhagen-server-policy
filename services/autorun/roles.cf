@@ -3,6 +3,7 @@ body file control
   inputs => {
     "services/roles/common.cf",
     "services/roles/vm.cf",
+    "sevices/common_classes.cf",
     "services/roles/k3s_server.cf",
     "services/roles/database.cf",
     "services/roles/fileserver.cf",
@@ -17,20 +18,20 @@ bundle agent roles
     "tags" slist => { "autorun" };
 
   methods:
-    "common"  usebundle => role_common;
-    "vm"      usebundle => role_vm;
+    "common" usebundle => role_common;
+    "vm" usebundle => role_vm;
 
     orhagen_no_server::
-      "k3s"   usebundle => role_k3s_server;
+      "k3s" usebundle => role_k3s_server;
 
     postgresql_server_turnkey::
-      "db"    usebundle => role_database;
+      "db" usebundle => role_database;
 
     fileserver_turnkey::
       "files" usebundle => role_fileserver;
 
     cfengine_hub::
-      "hub"   usebundle => role_cfengine_hub;
+      "hub" usebundle => role_cfengine_hub;
 
     pm1::
       "proxmox" usebundle => role_proxmox;

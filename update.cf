@@ -3,49 +3,44 @@
 #   update.cf - Basic Update Policy
 #
 ###############################################################################
-
 body common control
 # @brief Common control attributes for all components
 {
-      bundlesequence => {
-                          "update_def",
-                          "u_cfengine_enterprise",
-                          @(u_cfengine_enterprise.def),
-                          "cfe_internal_dc_workflow",
-                          "cfe_internal_update_policy",
-                          "cfengine_internal_standalone_self_upgrade",
-                          "cfe_internal_update_processes",
-                          @(update_def.bundlesequence_end), # Define control_common_update_bundlesequnce_end via augments
-      };
+  bundlesequence => {
+    "update_def",
+    "u_cfengine_enterprise",
+    @(u_cfengine_enterprise.def),
+    "cfe_internal_dc_workflow",
+    "cfe_internal_update_policy",
+    "cfengine_internal_standalone_self_upgrade",
+    "cfe_internal_update_processes",
+    @(update_def.bundlesequence_end), # Define control_common_update_bundlesequnce_end via augments
+  };
+  version => "update.cf 3.28.0";
+  inputs => {
+    "cfe_internal/update/lib.cf",
+    "cfe_internal/update/systemd_units.cf",
+    @(cfengine_update_controls.update_def_inputs),
+    "cfe_internal/update/cfe_internal_dc_workflow.cf",
+    "cfe_internal/update/cfe_internal_update_from_repository.cf",
+    "cfe_internal/update/update_policy.cf",
+    "cfe_internal/update/update_processes.cf",
+    @(update_def.augments_inputs),
+  };
 
-      version => "update.cf 3.28.0";
+  any::
+    ignore_missing_bundles => "$(update_def.control_common_ignore_missing_bundles)";
+    ignore_missing_inputs => "$(update_def.control_common_ignore_missing_inputs)";
 
-      inputs => {
-                  "cfe_internal/update/lib.cf",
-                  "cfe_internal/update/systemd_units.cf",
-                  @(cfengine_update_controls.update_def_inputs),
-                  "cfe_internal/update/cfe_internal_dc_workflow.cf",
-                  "cfe_internal/update/cfe_internal_update_from_repository.cf",
-                  "cfe_internal/update/update_policy.cf",
-                  "cfe_internal/update/update_processes.cf",
-                  @(update_def.augments_inputs)
-      };
+  control_common_tls_min_version_defined::
+    tls_min_version => "$(default:def.control_common_tls_min_version)"; # See also: allowtlsversion in body server control
+  control_common_tls_ciphers_defined::
+    tls_ciphers => "$(default:def.control_common_tls_ciphers)"; # See also: allowciphers in body server control
+  control_common_system_log_level_defined::
+    system_log_level => "$(default:def.control_common_system_log_level)";
 
-    any::
-        ignore_missing_bundles => "$(update_def.control_common_ignore_missing_bundles)";
-        ignore_missing_inputs => "$(update_def.control_common_ignore_missing_inputs)";
-
-    control_common_tls_min_version_defined::
-        tls_min_version => "$(default:def.control_common_tls_min_version)"; # See also: allowtlsversion in body server control
-
-    control_common_tls_ciphers_defined::
-        tls_ciphers => "$(default:def.control_common_tls_ciphers)"; # See also: allowciphers in body server control
-
-    control_common_system_log_level_defined::
-        system_log_level => "$(default:def.control_common_system_log_level)";
-
-    control_common_protocol_version_defined::
-        protocol_version => "$(default:def.control_common_protocol_version)";
+  control_common_protocol_version_defined::
+    protocol_version => "$(default:def.control_common_protocol_version)";
 }
 
 #############################################################################
@@ -53,11 +48,8 @@ bundle common cfengine_update_controls
 # @brief Resolve other controls necessary for update
 {
   vars:
-       "update_def_inputs"
-        slist => {
-                   "controls/update_def.cf",
-                   "controls/update_def_inputs.cf",
-                 };
+    "update_def_inputs"
+      slist => { "controls/update_def.cf", "controls/update_def_inputs.cf" };
 
   reports:
     DEBUG|DEBUG_cfengine_update_controls::
@@ -68,27 +60,27 @@ bundle agent cfengine_internal_standalone_self_upgrade
 # @brief Manage desired version state and execution of policy to reach the target version.
 {
   methods:
-      "cfengine_internal_standalone_self_upgrade_state_data";
-      "cfengine_internal_standalone_self_upgrade_execution";
+    "cfengine_internal_standalone_self_upgrade_state_data";
+    "cfengine_internal_standalone_self_upgrade_execution";
 }
+
 bundle agent cfengine_internal_standalone_self_upgrade_state_data
 # @brief Clear stale recorded desired version information from state
 {
   vars:
+    "binary_upgrade_entry"
+      string => "$(this.promise_dirname)/standalone_self_upgrade.cf";
 
-      "binary_upgrade_entry"
-        string => "$(this.promise_dirname)/standalone_self_upgrade.cf";
-
-      "desired_pkg_data_path" string =>
-        "$(cfengine_internal_standalone_self_upgrade_execution.desired_pkg_data_path)";
+    "desired_pkg_data_path"
+      string => "$(cfengine_internal_standalone_self_upgrade_execution.desired_pkg_data_path)";
 
   files:
-
-      # We consider the data stale if it's older than the policy that generated it
-      "$(desired_pkg_data_path)" -> { "ENT-4317" }
-        delete => u_tidy,
-        if => isnewerthan( $(binary_upgrade_entry) , $(desired_pkg_data_path) );
+    # We consider the data stale if it's older than the policy that generated it
+    "$(desired_pkg_data_path)" -> { "ENT-4317" }
+      delete => u_tidy,
+      if => isnewerthan($(binary_upgrade_entry), $(desired_pkg_data_path));
 }
+
 bundle agent cfengine_internal_standalone_self_upgrade_execution
 # @brief Manage the version of CFEngine that is currently installed. This policy
 # executes a stand alone policy as a sub agent. If systemd is found we assume
@@ -99,68 +91,87 @@ bundle agent cfengine_internal_standalone_self_upgrade_execution
 # upgrade policy.
 {
   vars:
+    "exec_prefix"
+      string => ifelse(
+        isexecutable("/bin/systemd-run"),
+        "/bin/systemd-run --unit=cfengine-upgrade --scope ", # trailing space in commands important
+        isexecutable("/usr/bin/systemd-run"),
+        "/usr/bin/systemd-run --unit=cfengine-upgrade --scope ",
+        ""
+      );
 
-      "exec_prefix"
-        string => ifelse( isexecutable("/bin/systemd-run"), "/bin/systemd-run --unit=cfengine-upgrade --scope ", # trailing space in commands important
-                          isexecutable( "/usr/bin/systemd-run" ), "/usr/bin/systemd-run --unit=cfengine-upgrade --scope ",
-                          "");
+    "local_update_log_dir"
+      string => translatepath("$(sys.workdir)/software_updates/update_log"),
+      comment => "This directory is used for logging the current version of cfengine running.";
 
-      "local_update_log_dir"
-        string => translatepath("$(sys.workdir)/software_updates/update_log"),
-        comment => "This directory is used for logging the current version of cfengine running.";
-
-      "hub_binary_version" -> { "ENT-10664" }
-        data => data_regextract(
-                                 "^(?<major_minor_patch>\d+\.\d+\.\d+)-(?<release>\d+)",
-                                 readfile("$(sys.statedir)$(const.dirsep)hub_cf_version.txt" ) ),
-        if => fileexists( "$(sys.statedir)$(const.dirsep)hub_cf_version.txt" );
+    "hub_binary_version" -> { "ENT-10664" }
+      data => data_regextract(
+        "^(?<major_minor_patch>\d+\.\d+\.\d+)-(?<release>\d+)",
+        readfile("$(sys.statedir)$(const.dirsep)hub_cf_version.txt")
+      ),
+      if => fileexists("$(sys.statedir)$(const.dirsep)hub_cf_version.txt");
 
   classes:
-      # If we are running the version explicitly defined by the user
-      "at_desired_version_by_user_specification" -> { "ENT-3592" }
-        expression => strcmp( "$(def.cfengine_software_pkg_version)", "$(sys.cf_version)" );
+    # If we are running the version explicitly defined by the user
+    "at_desired_version_by_user_specification" -> { "ENT-3592" }
+      expression => strcmp(
+        "$(def.cfengine_software_pkg_version)", "$(sys.cf_version)"
+      );
 
-      "at_desired_version_by_hub_binary_version" -> { "ENT-10664" }
-        expression => strcmp( "$(hub_binary_version[major_minor_patch])", "$(sys.cf_version)" );
+    "at_desired_version_by_hub_binary_version" -> { "ENT-10664" }
+      expression => strcmp(
+        "$(hub_binary_version[major_minor_patch])", "$(sys.cf_version)"
+      );
 
-      "at_desired_version"
-        or => { "at_desired_version_by_user_specification",
-                "at_desired_version_by_hub_binary_version" };
+    "at_desired_version"
+      or => {
+        "at_desired_version_by_user_specification",
+        "at_desired_version_by_hub_binary_version",
+      };
 
     policy_server|am_policy_hub::
+      "downloaded_target_binaries"
+        expression => fileexists(
+          "$(sys.workdir)/master_software_updates/$(def.cfengine_software_pkg_version)-downloaded.txt"
+        ),
+        if => isvariable("def.cfengine_software_pkg_version");
 
       "downloaded_target_binaries"
-        expression => fileexists( "$(sys.workdir)/master_software_updates/$(def.cfengine_software_pkg_version)-downloaded.txt"),
-        if => isvariable( "def.cfengine_software_pkg_version");
-
-      "downloaded_target_binaries"
-        expression => fileexists( "$(sys.workdir)/master_software_updates/$(sys.cf_version_major).$(sys.cf_version_minor).$(sys.cf_version_patch)-downloaded.txt"),
-        if => not( isvariable( "def.cfengine_software_pkg_version") );
+        expression => fileexists(
+          "$(sys.workdir)/master_software_updates/$(sys.cf_version_major).$(sys.cf_version_minor).$(sys.cf_version_patch)-downloaded.txt"
+        ),
+        if => not(isvariable("def.cfengine_software_pkg_version"));
 
   files:
-
     !(policy_server|am_policy_hub)::
-
-      "$(sys.statedir)/hub_cf_version.txt" -> { "ENT-10664", "handle:server_access_grant_access_state_cf_version" }
-        comment => concat( "We copy the hub binary version state locally",
-                           " so that we can target the hubs binary",
-                           " version as the default target version for",
-                           " self upgrade." ),
+      "$(sys.statedir)/hub_cf_version.txt" -> {
+          "ENT-10664", "handle:server_access_grant_access_state_cf_version"
+        }
+        comment => concat(
+          "We copy the hub binary version state locally",
+          " so that we can target the hubs binary",
+          " version as the default target version for",
+          " self upgrade."
+        ),
         handle => "cfe_internal_update_hub_cf_version",
-        copy_from => u_remote_dcp_missing_ok( "hub-cf_version", $(sys.policy_hub) );
+        copy_from => u_remote_dcp_missing_ok(
+          "hub-cf_version", $(sys.policy_hub)
+        );
 
     policy_server|am_policy_hub::
-
-      "$(sys.statedir)/cf_version.txt" -> { "ENT-10664", "handle:server_access_grant_access_state_cf_version" }
-        comment => concat( "We record the hubs binary version in state and this",
-                           " is shared with clients so that clients can target",
-                           " the hubs binary version as the default target",
-                           " version for self upgrade." ),
+      "$(sys.statedir)/cf_version.txt" -> {
+          "ENT-10664", "handle:server_access_grant_access_state_cf_version"
+        }
+        comment => concat(
+          "We record the hubs binary version in state and this",
+          " is shared with clients so that clients can target",
+          " the hubs binary version as the default target",
+          " version for self upgrade."
+        ),
         handle => "cfe_internal_update_state_cf_version",
         content => "$(sys.cf_version_major).$(sys.cf_version_minor).$(sys.cf_version_patch)-$(sys.cf_version_release)";
 
     enterprise_edition::
-
       "$(local_update_log_dir)/$(sys.cf_version)_is_running" -> { "ENT-4352" }
         comment => "This results in a record of the first time the enterprise
                     agent of a given version is seen to run on a host.",
@@ -168,56 +179,47 @@ bundle agent cfengine_internal_standalone_self_upgrade_execution
         create => "true";
 
   commands:
-
     trigger_upgrade.!(at_desired_version|mpf_disable_hub_masterfiles_software_update_seed|downloaded_target_binaries)::
-
       '$(exec_prefix)$(sys.cf_agent) --inform --timestamp --file "$(this.promise_dirname)$(const.dirsep)standalone_self_upgrade.cf" --define trigger_upgrade,update_cf_initiated >"$(sys.workdir)$(const.dirsep)outputs/standalone_self_upgrade_$(sys.cdate).log"'
-      handle => "standalone_self_upgrade",
-      contain => in_shell;
+        handle => "standalone_self_upgrade",
+        contain => in_shell;
 
   reports:
-
     trigger_upgrade.(inform_mode|verbose_mode|DEBUG|DEBUG_cfengine_internal_standalone_self_upgrade)::
-      "Skipped self upgrade because we are running the desired version $(sys.cf_version)" -> { "ENT-3592" }
+      "Skipped self upgrade because we are running the desired version $(sys.cf_version)" -> {
+          "ENT-3592"
+        }
         if => "at_desired_version";
-
 }
 
 body agent control
 # @brief Agent controls for update
 {
-
-      ifelapsed => "1";
-      skipidentify => "true";
-
+  ifelapsed => "1";
+  skipidentify => "true";
 @if minimum_version(3.27.0)
-      # The order in which promises are evaluated (top_down|classic)
-        evaluation_order => "$(default:update_def.control_agent_update_evaluation_order)";
+  # The order in which promises are evaluated (top_down|classic)
+  evaluation_order => "$(default:update_def.control_agent_update_evaluation_order)";
 
-      # The permissions automatically created directories should have
-        default_directory_create_mode => "$(default:update_def.control_agent_default_directory_create_mode)";
+  # The permissions automatically created directories should have
+  default_directory_create_mode => "$(default:update_def.control_agent_default_directory_create_mode)";
 @endif
+  control_agent_agentfacility_configured::
+    agentfacility => "$(default:update_def.control_agent_agentfacility)";
 
-    control_agent_agentfacility_configured::
-
-        agentfacility => "$(default:update_def.control_agent_agentfacility)";
-
-    mpf_update_control_agent_default_repository::
-
-      # Location to backup files before they are edited by cfengine
-
-        default_repository => "$(update_def.control_agent_default_repository)";
-
+  mpf_update_control_agent_default_repository::
+    # Location to backup files before they are edited by cfengine
+    default_repository => "$(update_def.control_agent_default_repository)";
 }
 
 #############################################################################
-
 body classes u_kept_successful_command
 # @brief Set command to "kept" instead of "repaired" if it returns 0
 {
-      kept_returncodes => { "0" };
-      failed_returncodes => { "1" };
+  kept_returncodes => { "0" };
+  failed_returncodes => { "1" };
 }
+
 body contain in_shell
 {
   useshell => "true";

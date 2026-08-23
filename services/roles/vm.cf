@@ -17,7 +17,7 @@ bundle agent role_vm
   commands:
     Hr00.is_vm::
       "/bin/sh"
-        args    => "-c 'DEBIAN_FRONTEND=noninteractive apt-get -q -y update && DEBIAN_FRONTEND=noninteractive apt-get -q -y dist-upgrade'",
-        action  => if_elapsed(1440),
+        args => "-c 'DEBIAN_FRONTEND=noninteractive apt-get -q -y update && DEBIAN_FRONTEND=noninteractive apt-get -q -y dist-upgrade'",
+        action => if_elapsed(1440),
         comment => "Update all packages once per day during the midnight hour (VM guests only)";
 }

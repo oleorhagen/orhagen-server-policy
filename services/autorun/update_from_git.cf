@@ -9,8 +9,8 @@ bundle agent update_from_git
   commands:
     am_policy_hub::
       "$(paths.git)"
-        args    => "-C $(masterfiles) pull --ff-only",
+        args => "-C $(masterfiles) pull --ff-only",
         contain => in_shell,
-        action  => if_elapsed(15),
+        action => if_elapsed(15),
         comment => "Pull latest policy from GitHub every 15 minutes (hub only)";
 }

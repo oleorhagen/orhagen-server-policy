@@ -1,69 +1,81 @@
 # This policy is designed to be run with an independent agent.
-
 # WARNING: Including this policy into the inputs of another policy may result in
 # duplicate definition of bundles.
-
 # TODO remove windows_unattended_upgrade.cf when ENT-6823 allows us to use msiexec packages module
 bundle common standalone_self_upgrade_file_control
 {
   vars:
-    "inputs" slist => { "$(this.promise_dirname)$(const.dirsep)cfe_internal$(const.dirsep)update$(const.dirsep)windows_unattended_upgrade.cf" };
+    "inputs"
+      slist => {
+        "$(this.promise_dirname)$(const.dirsep)cfe_internal$(const.dirsep)update$(const.dirsep)windows_unattended_upgrade.cf",
+      };
 }
 
 body file control
 {
   inputs => { @(standalone_self_upgrade_file_control.inputs) };
 }
+
 bundle common def_standalone_self_upgrade
 {
   vars:
-
-      "control_agent_agentfacility" -> { "ENT-10209" }
-        string => "",
-        if => not( isvariable ( "default:def.control_agent_agentfacility" ));
+    "control_agent_agentfacility" -> { "ENT-10209" }
+      string => "",
+      if => not(isvariable("default:def.control_agent_agentfacility"));
 
   classes:
+    "control_agent_agentfacility_configured" -> { "ENT-10209" }
+      expression => regcmp(
+        "LOG_(USER|DAEMON|LOCAL[0-7])", $(control_agent_agentfacility)
+      ),
+      comment => concat(
+        "If default:def.control_agent_agentfacility is a",
+        " valid setting, we want to use it in body agent",
+        " control for setting agentfacility"
+      );
 
-      "control_agent_agentfacility_configured" -> { "ENT-10209" }
-        expression => regcmp( "LOG_(USER|DAEMON|LOCAL[0-7])",
-                              $(control_agent_agentfacility) ),
-        comment => concat( "If default:def.control_agent_agentfacility is a",
-                           " valid setting, we want to use it in body agent",
-                           " control for setting agentfacility" );
+    "control_common_tls_min_version_defined" -> { "ENT-10198" }
+      expression => isvariable("default:def.control_common_tls_min_version"),
+      comment => concat(
+        "If default:def.control_common_tls_min_version is defined then",
+        " its value will be used for the minimum version in outbound",
+        " connections. Else the binary default will be used."
+      );
 
-      "control_common_tls_min_version_defined" -> { "ENT-10198" }
-        expression => isvariable( "default:def.control_common_tls_min_version"),
-        comment => concat( "If default:def.control_common_tls_min_version is defined then",
-                           " its value will be used for the minimum version in outbound",
-                           " connections. Else the binary default will be used.");
+    "control_common_tls_ciphers_defined" -> { "ENT-10198" }
+      expression => isvariable("default:def.control_common_tls_ciphers"),
+      comment => concat(
+        "If default:def.control_common_tls_ciphers is defined then",
+        " its value will be used for the set of tls ciphers allowed",
+        " for outbound connections. Else the binary default will be used."
+      );
 
-      "control_common_tls_ciphers_defined" -> { "ENT-10198" }
-        expression => isvariable( "default:def.control_common_tls_ciphers"),
-        comment => concat( "If default:def.control_common_tls_ciphers is defined then",
-                           " its value will be used for the set of tls ciphers allowed",
-                           " for outbound connections. Else the binary default will be used.");
+    "control_common_system_log_level_defined" -> { "CFE-4452" }
+      expression => isvariable("default:def.control_common_system_log_level"),
+      comment => concat(
+        "The minimum log level required for log messages to go to the",
+        " system log (e.g. syslog or Windows Event Log).",
+        " (critical|error|warning|notice|info)"
+      );
 
-      "control_common_system_log_level_defined" -> { "CFE-4452" }
-        expression => isvariable( "default:def.control_common_system_log_level" ),
-        comment => concat( "The minimum log level required for log messages to go to the",
-                           " system log (e.g. syslog or Windows Event Log).",
-                           " (critical|error|warning|notice|info)" );
-
-      "control_common_protocol_version_defined" -> { "CFE-4543" }
-        expression => isvariable( "default:def.control_common_protocol_version" ),
-        comment => concat( "Defines the protocol version to use for all outgoing",
-                           " connections.",
-                           # It's challenging to keep this aligned with the core agent code
-                           # cf-promises --syntax-description=json | jq -r '.bodyTypes.common.attributes.protocol_version.range'
-                           " (1|classic|2|tls|3|cookie|4|filestream|latest)" );
+    "control_common_protocol_version_defined" -> { "CFE-4543" }
+      expression => isvariable("default:def.control_common_protocol_version"),
+      comment => concat(
+        "Defines the protocol version to use for all outgoing",
+        " connections.",
+        # It's challenging to keep this aligned with the core agent code
+        # cf-promises --syntax-description=json | jq -r '.bodyTypes.common.attributes.protocol_version.range'
+        " (1|classic|2|tls|3|cookie|4|filestream|latest)"
+      );
 }
+
 body agent control
 # @brief Agent controls for standalone self upgrade
 {
-    control_agent_agentfacility_configured::
-
-        agentfacility => "$(default:update_def.control_agent_agentfacility)";
+  control_agent_agentfacility_configured::
+    agentfacility => "$(default:update_def.control_agent_agentfacility)";
 }
+
 bundle agent main
 # @brief This bundle drives the self upgrade. It actuates the appropriate
 # bundles to download binaries to the hub for serving to clients, caching the
@@ -71,10 +83,11 @@ bundle agent main
 # non hubs.
 {
   classes:
-
-      "policy_server_dat_unstable"
-        expression => isnewerthan( "$(sys.workdir)/policy_server.dat", "$(sys.workdir)/outputs" ),
-        comment => "If $(sys.workdir)/policy_server.dat is newer than the
+    "policy_server_dat_unstable"
+      expression => isnewerthan(
+        "$(sys.workdir)/policy_server.dat", "$(sys.workdir)/outputs"
+      ),
+      comment => "If $(sys.workdir)/policy_server.dat is newer than the
                     outputs directory, it can indicate that the current agent
                     execution is a result of bootstrap. For stability we want to
                     skip upgrades during bootstrap. The outputs directory should
@@ -82,25 +95,18 @@ bundle agent main
                     and allow upgrade then.";
 
   reports:
-      "Running $(this.promise_filename)";
+    "Running $(this.promise_filename)";
 
   methods:
-
-      "cfengine_software";
+    "cfengine_software";
 
     (am_policy_hub|policy_server).!mpf_disable_hub_masterfiles_software_update_seed::
-
       "Master Software Repository Data"
         usebundle => cfengine_master_software_content;
 
     !(am_policy_hub|policy_server|policy_server_dat_unstable)::
-
-      "Local Software Cache"
-        usebundle => cfengine_software_cached_locally;
-
-      "CFEngine Version"
-        usebundle => cfengine_software_version;
-
+      "Local Software Cache" usebundle => cfengine_software_cached_locally;
+      "CFEngine Version" usebundle => cfengine_software_version;
 }
 
 bundle common package_module_knowledge
@@ -116,6 +122,7 @@ bundle common package_module_knowledge
     redhat|centos|amazon_linux::
       "platform_default" string => "yum";
 }
+
 bundle common u_common_knowledge
 # @brief standalone common packages knowledge bundle
 #
@@ -123,51 +130,84 @@ bundle common u_common_knowledge
 # @see common_knowledge
 {
   vars:
-      "list_update_ifelapsed_now" string => "10080";
+    "list_update_ifelapsed_now" string => "10080";
 }
+
 bundle agent cfengine_software
 # @brief Variables to control the specifics in desired package selection
 {
   vars:
     any::
-
       # Extract the hub binary version info if it's available. Only expected to
       # be available on a client.
       "hub_binary_version" -> { "ENT-10664" }
         data => data_regextract(
-                                 "^(?<major_minor_patch>\d+\.\d+\.\d+)-(?<release>\d+)",
-                                 readfile("$(sys.statedir)$(const.dirsep)hub_cf_version.txt" ) ),
-        if => fileexists( "$(sys.statedir)$(const.dirsep)hub_cf_version.txt" );
+          "^(?<major_minor_patch>\d+\.\d+\.\d+)-(?<release>\d+)",
+          readfile("$(sys.statedir)$(const.dirsep)hub_cf_version.txt")
+        ),
+        if => fileexists("$(sys.statedir)$(const.dirsep)hub_cf_version.txt");
 
       # Default desired CFEngine software
-      "pkg_name" string => ifelse( isvariable( "def.cfengine_software_pkg_name" ), $(def.cfengine_software_pkg_name), "cfengine-nova");
-
+      "pkg_name"
+        string => ifelse(
+          isvariable("def.cfengine_software_pkg_name"),
+          $(def.cfengine_software_pkg_name),
+          "cfengine-nova"
+        );
 
       "pkg_version" -> { "ENT-10664" }
         string => "$(sys.cf_version_major).$(sys.cf_version_minor).$(sys.cf_version_patch)",
         if => "am_policy_hub|policy_server",
         comment => "The hub will use its own version to seed client packages.";
+
       "pkg_version" -> { "ENT-10664" }
         string => "$(hub_binary_version[major_minor_patch])",
         if => isvariable("hub_binary_version[major_minor_patch]"),
         comment => "Use the hub binary version if available.";
+
       "pkg_version"
         string => "$(def.cfengine_software_pkg_version)",
-        if => isvariable( "def.cfengine_software_pkg_version" ),
+        if => isvariable("def.cfengine_software_pkg_version"),
         comment => "If the target version is explicitly set, we want to use that.";
 
+      "pkg_release"
+        string => "$(sys.cf_version_release)",
+        if => "am_policy_hub|policy_server";
 
-      "pkg_release" string => "$(sys.cf_version_release)", if => "am_policy_hub|policy_server";
-      "pkg_release" string => "$(hub_binary_version[release])", if => isvariable("hub_binary_version[release]");
-      "pkg_release" string => "$(def.cfengine_software_pkg_release)", if => isvariable("def.cfengine_software_pkg_release");
+      "pkg_release"
+        string => "$(hub_binary_version[release])",
+        if => isvariable("hub_binary_version[release]");
 
-      "pkg_arch" string => ifelse( isvariable( "def.cfengine_software_pkg_arch" ), $(def.cfengine_software_pkg_arch), "x86_64");
-      "package_dir" string => ifelse( isvariable( "def.cfengine_software_pkg_dir" ), $(def.cfengine_software_pkg_dir), "$(sys.flavour)_$(sys.arch)");
-      "pkg_edition_path" string => ifelse( isvariable( "def.cfengine_software_pkg_edition_path" ), $(def.cfengine_software_pkg_edition_path), "enterprise/Enterprise-$(pkg_version)/agent");
+      "pkg_release"
+        string => "$(def.cfengine_software_pkg_release)",
+        if => isvariable("def.cfengine_software_pkg_release");
+
+      "pkg_arch"
+        string => ifelse(
+          isvariable("def.cfengine_software_pkg_arch"),
+          $(def.cfengine_software_pkg_arch),
+          "x86_64"
+        );
+
+      "package_dir"
+        string => ifelse(
+          isvariable("def.cfengine_software_pkg_dir"),
+          $(def.cfengine_software_pkg_dir),
+          "$(sys.flavour)_$(sys.arch)"
+        );
+
+      "pkg_edition_path"
+        string => ifelse(
+          isvariable("def.cfengine_software_pkg_edition_path"),
+          $(def.cfengine_software_pkg_edition_path),
+          "enterprise/Enterprise-$(pkg_version)/agent"
+        );
 
     community_edition::
       "pkg_name" string => "cfengine-community";
-      "pkg_edition_path" string => "community_binaries/Community-$(pkg_version)";
+
+      "pkg_edition_path"
+        string => "community_binaries/Community-$(pkg_version)";
 
     aix::
       "pkg_name" string => "cfengine-nova";
@@ -177,26 +217,23 @@ bundle agent cfengine_software
       "pkg_name" string => "cfengine-nova";
 
     amzn_2::
-
-      "package_dir"
-        string => "amazon_2_$(pkg_arch)";
+      "package_dir" string => "amazon_2_$(pkg_arch)";
 
     (debian|ubuntu).64_bit::
-
       "pkg_arch"
         string => "amd64",
         comment => "On debian hosts it's the standard to use 'amd64' instead of
                    'x86_64' in package architectures.";
 
     (debian|ubuntu).aarch64::
-
       "pkg_arch"
         string => "arm64",
-        comment => concat( "On debian hosts it's the CFEngine standard to use 'arm64' in",
-                           "the package filename." );
+        comment => concat(
+          "On debian hosts it's the CFEngine standard to use 'arm64' in",
+          "the package filename."
+        );
 
-      "package_dir"
-        string => "$(sys.flavor)_arm_64";
+      "package_dir" string => "$(sys.flavor)_arm_64";
 
     (redhat|centos|suse|sles).32_bit::
       "pkg_arch"
@@ -205,7 +242,6 @@ bundle agent cfengine_software
                     compatible from i386 up.";
 
     hpux::
-
       "package_dir"
         string => "$(sys.class)_$(sys.arch)",
         comment => "The directory within software updates to look for packages.
@@ -213,18 +249,20 @@ bundle agent cfengine_software
                     instead.";
 
     windows::
-
       "package_dir" -> { "ENT-9010" }
         string => "$(sys.class)_$(sys.arch)",
-        comment => concat( "The directory within software updates to look for ",
-                           "packages. Since one package is built for each",
-                           "supported architecture instead of each platform",
-                           "version architecture we use sys.class and sys.arch.");
+        comment => concat(
+          "The directory within software updates to look for ",
+          "packages. Since one package is built for each",
+          "supported architecture instead of each platform",
+          "version architecture we use sys.class and sys.arch."
+        );
 
     any::
-
       "local_software_dir"
-        string => translatepath( "$(sys.workdir)/software_updates/$(package_dir)" ),
+        string => translatepath(
+          "$(sys.workdir)/software_updates/$(package_dir)"
+        ),
         comment => "So that we converge on the first pass we set this last as
                     package_dir may vary across platforms.";
 
@@ -236,18 +274,15 @@ bundle agent cfengine_software
       "$(this.bundle) pkg_arch = $(pkg_arch)";
       "$(this.bundle) package_dir = $(package_dir)";
 
-
   files:
     windows::
       "$(sys.bindir)$(const.dirsep)vercmp.ps1"
         create => "true",
         template_method => "mustache",
         edit_template => "$(this.promise_dirname)$(const.dirsep)/templates/vercmp.ps1",
-        template_data => mergedata( '{}' ),
+        template_data => mergedata('{}'),
         comment => "We need to use specialized version comparison logic for unattended self upgrades.";
-
 }
-
 
 bundle agent cfengine_software_cached_locally
 # @brief Ensure that the internal local software mirror is up to date
@@ -257,37 +292,33 @@ bundle agent cfengine_software_cached_locally
       "Ensuring local software cache in $(local_software_dir) is up to date";
 
   vars:
-      "local_software_dir"
-        string => "$(cfengine_software.local_software_dir)";
+    "local_software_dir" string => "$(cfengine_software.local_software_dir)";
+    "package_dir" string => "$(cfengine_software.package_dir)";
 
-      "package_dir"
-        string => "$(cfengine_software.package_dir)";
-
-      "master_software_location" -> { "ENT-4953" }
-        string => "master_software_updates",
-        comment => "The Cfengine binary updates directory on the policy server",
-        handle => "cfe_internal_update_bins_vars_master_software_location";
+    "master_software_location" -> { "ENT-4953" }
+      string => "master_software_updates",
+      comment => "The Cfengine binary updates directory on the policy server",
+      handle => "cfe_internal_update_bins_vars_master_software_location";
 
   files:
-      "$(local_software_dir)/."
-        create => "true",
-        comment => "Ensure the local software directory exists for new binaries
+    "$(local_software_dir)/."
+      create => "true",
+      comment => "Ensure the local software directory exists for new binaries
                     to be downloaded to";
 
-      # NOTE This is pegged to the single upstream policy hub, it won't fail
-      # over to a secondary for copying the binarys to update.
-
-      "$(local_software_dir)/."
-        comment => "Copy binary updates from master source on policy server",
-        handle => "cfe_internal_update_bins_files_pkg_copy",
-        copy_from => u_dsync( "$(master_software_location)/$(package_dir)", $(sys.policy_hub) ),
-        file_select => plain,
-        depth_search => u_recurse_basedir(inf),
-        action => u_immediate,
-        classes => u_if_repaired("bin_newpkg");
-
+    # NOTE This is pegged to the single upstream policy hub, it won't fail
+    # over to a secondary for copying the binarys to update.
+    "$(local_software_dir)/."
+      comment => "Copy binary updates from master source on policy server",
+      handle => "cfe_internal_update_bins_files_pkg_copy",
+      copy_from => u_dsync(
+        "$(master_software_location)/$(package_dir)", $(sys.policy_hub)
+      ),
+      file_select => plain,
+      depth_search => u_recurse_basedir(inf),
+      action => u_immediate,
+      classes => u_if_repaired("bin_newpkg");
 }
-
 
 bundle agent cfengine_software_version
 # @brief Ensure the version of CFEngine installed is correct for supported
@@ -295,31 +326,44 @@ bundle agent cfengine_software_version
 # upgrading.
 {
   classes:
-      "__supported_platform" -> { "ENT-5045", "ENT-5152", "ENT-4094", "ENT-8247" }
-        or => {
-                "amazon_linux",
-                "redhat.!redhat_4",
-                "centos.!centos_4",
-                "debian",
-                "suse|opensuse",
-                "ubuntu",
-                "hpux",
-                "aix",
-                "windows", # ENT-4094
-        };
+    "__supported_platform" -> { "ENT-5045", "ENT-5152", "ENT-4094", "ENT-8247" }
+      or => {
+        "amazon_linux",
+        "redhat.!redhat_4",
+        "centos.!centos_4",
+        "debian",
+        "suse|opensuse",
+        "ubuntu",
+        "hpux",
+        "aix",
+        "windows", # ENT-4094
+      };
 
-      # Add "windows" to __new_implementation classes with ENT-6823
-      "__new_implementation"
-        or => { "amazon_linux", "redhat", "centos", "ubuntu", "debian", "suse", "opensuse" };
+    # Add "windows" to __new_implementation classes with ENT-6823
+    "__new_implementation"
+      or => {
+        "amazon_linux",
+        "redhat",
+        "centos",
+        "ubuntu",
+        "debian",
+        "suse",
+        "opensuse",
+      };
 
   vars:
-      "pkg_name" string => "$(cfengine_software.pkg_name)";
-      "pkg_version" string => "$(cfengine_software.pkg_version)";
-      "pkg_release" string => "$(cfengine_software.pkg_release)";
-      "_cf_version_release" string => ifelse( isvariable( "sys.cf_version_release" ), "$(sys.cf_version_release)", "1" );
-      "pkg_arch" string => "$(cfengine_software.pkg_arch)";
-      "package_dir" string => "$(cfengine_software.package_dir)";
-      "local_software_dir" string => "$(cfengine_software.local_software_dir)";
+    "pkg_name" string => "$(cfengine_software.pkg_name)";
+    "pkg_version" string => "$(cfengine_software.pkg_version)";
+    "pkg_release" string => "$(cfengine_software.pkg_release)";
+
+    "_cf_version_release"
+      string => ifelse(
+        isvariable("sys.cf_version_release"), "$(sys.cf_version_release)", "1"
+      );
+
+    "pkg_arch" string => "$(cfengine_software.pkg_arch)";
+    "package_dir" string => "$(cfengine_software.package_dir)";
+    "local_software_dir" string => "$(cfengine_software.local_software_dir)";
 
   methods:
     __supported_platform.__new_implementation::
@@ -337,40 +381,45 @@ bundle agent cfengine_software_version
         if => and(
           "windows",
           or(
-              not(strcmp("$(cfengine_software.pkg_version)", "$(sys.cf_version)")),
-              not(strcmp("$(cfengine_software.pkg_release)", "$(_cf_version_release)"))
+            not(
+              strcmp("$(cfengine_software.pkg_version)", "$(sys.cf_version)")
+            ),
+            not(
+              strcmp(
+                "$(cfengine_software.pkg_release)", "$(_cf_version_release)"
+              )
             )
+          )
         );
 
   reports:
-      !__supported_platform.inform_mode::
-        "$(this.bundle) $(package_dir) is not supported";
+    !__supported_platform.inform_mode::
+      "$(this.bundle) $(package_dir) is not supported";
 }
 
 bundle agent cfengine_software_version_packages2
 # @brief Ensure the correct version of software is installed using the new packages promise implementation
 {
   vars:
-      "pkg_name" string => "$(cfengine_software.pkg_name)";
-      "pkg_version" string => "$(cfengine_software.pkg_version)";
-      "pkg_release" string => "$(cfengine_software.pkg_release)";
-      "pkg_arch" string => "$(cfengine_software.pkg_arch)";
-      "package_dir" string => "$(cfengine_software.package_dir)";
-      "local_software_dir" string => "$(cfengine_software.local_software_dir)";
+    "pkg_name" string => "$(cfengine_software.pkg_name)";
+    "pkg_version" string => "$(cfengine_software.pkg_version)";
+    "pkg_release" string => "$(cfengine_software.pkg_release)";
+    "pkg_arch" string => "$(cfengine_software.pkg_arch)";
+    "package_dir" string => "$(cfengine_software.package_dir)";
+    "local_software_dir" string => "$(cfengine_software.local_software_dir)";
 
   packages:
-
     (amazon_linux|redhat|centos)::
       "$(local_software_dir)/$(cfengine_package_names.my_pkg)"
-      policy => "present",
-      package_module => yum,
-      comment => "Ensure the latest package is installed";
+        policy => "present",
+        package_module => yum,
+        comment => "Ensure the latest package is installed";
 
     (debian|ubuntu)::
       "$(local_software_dir)/$(cfengine_package_names.my_pkg)"
-      policy => "present",
-      package_module => apt_get,
-      comment => "Ensure the latest package is installed";
+        policy => "present",
+        package_module => apt_get,
+        comment => "Ensure the latest package is installed";
 
     (opensuse|suse)::
       "$(local_software_dir)/$(cfengine_package_names.my_pkg)"
@@ -378,14 +427,13 @@ bundle agent cfengine_software_version_packages2
         package_module => zypper,
         comment => "Ensure the latest package is installed";
 
-     # TODO, uncomment the following to enable msiexec packages module (ENT-6823)
-#    windows::
-#      "$(local_software_dir)$(const.dirsep)$(cfengine_package_names.my_pkg)"
-#        policy => "present",
-#        package_module => msiexec,
-#        comment => "Ensure the latest package is installed";
+  # TODO, uncomment the following to enable msiexec packages module (ENT-6823)
+  #    windows::
+  #      "$(local_software_dir)$(const.dirsep)$(cfengine_package_names.my_pkg)"
+  #        policy => "present",
+  #        package_module => msiexec,
+  #        comment => "Ensure the latest package is installed";
   reports:
-
     "DEBUG|DEBUG_$(this.bundle)"::
       "Running $(this.bundle)";
 }
@@ -402,106 +450,96 @@ bundle agent cfengine_software_version_packages1
 #@ - freebsd|netbsd (pkg_add)
 {
   classes:
-
-      "cf_upgrade" expression => "(redhat|suse|sles|debian|solaris|solarisx86).!(am_policy_hub|policy_server)";
+    "cf_upgrade"
+      expression => "(redhat|suse|sles|debian|solaris|solarisx86).!(am_policy_hub|policy_server)";
 
   vars:
+    # NOTE These logs are not actively used or cleaned up by anything. Their
+    # use will be phased as platforms migrate to the new packages
+    # implementation for self upgrades.
+    "local_update_log_dir"
+      string => translatepath("$(sys.workdir)/software_updates/update_log"),
+      comment => "Local directory to store update log for this host.",
+      handle => "cfe_internal_update_bins_vars_local_update_log_dir";
 
-      # NOTE These logs are not actively used or cleaned up by anything. Their
-      # use will be phased as platforms migrate to the new packages
-      # implementation for self upgrades.
+    "local_software_dir" string => "$(cfengine_software.local_software_dir)";
 
-      "local_update_log_dir"
-        string => translatepath("$(sys.workdir)/software_updates/update_log"),
-        comment => "Local directory to store update log for this host.",
-        handle => "cfe_internal_update_bins_vars_local_update_log_dir";
-
-      "local_software_dir" string => "$(cfengine_software.local_software_dir)";
-
-      "desired_version" -> { "ENT-4094" }
-        string => ifelse("linux", "$(cfengine_software.pkg_version)-$(cfengine_software.pkg_release)",
-                         "windows", "$(cfengine_software.pkg_version).$(cfengine_software.pkg_release)", # ENT-4094
-                         "aix", "$(cfengine_software.pkg_version).0",
-                         $(cfengine_software.pkg_version) ),
-        comment => "The version attribute sometimes contains package release
+    "desired_version" -> { "ENT-4094" }
+      string => ifelse(
+        "linux",
+        "$(cfengine_software.pkg_version)-$(cfengine_software.pkg_release)",
+        "windows",
+        "$(cfengine_software.pkg_version).$(cfengine_software.pkg_release)", # ENT-4094
+        "aix",
+        "$(cfengine_software.pkg_version).0",
+        $(cfengine_software.pkg_version)
+      ),
+      comment => "The version attribute sometimes contains package release
                     information and sometimes does not. Here we construct the
                     version used in the package promise for the given
                     platform.";
 
     cf_upgrade::
-
       # We only use cf-upgrade for some platforms, the need for it has been
       # deprecated by the new packages promise implementation.
-
       # backup script for cf-upgrade
       # the script should have 2 conditions, BACKUP and RESTORE
       # BACKUP and RESTORE status is $(const.dollar)1 variable in the script
       # see more details at bundle edit_line u_backup_script
-
       # NOTE cf-upgrade wants to execute from /tmp by default. This is
       # problematic for systems where /tmp is mounted with no-exec.
-
-      "backup_script"   string => "/tmp/cf-upgrade_backup.sh";
+      "backup_script" string => "/tmp/cf-upgrade_backup.sh";
 
       # a single compressed backup file for cf-upgrade
       # this backup_file is passed to backup_script as $(const.dollar)2 variable
       # cf-upgrade will extract this file if return signal of upgrade command is not 0
-
-      "backup_file"     string => "/tmp/cfengine-nova-$(sys.cf_version).tar.gz";
+      "backup_file" string => "/tmp/cfengine-nova-$(sys.cf_version).tar.gz";
 
       # install script for cf-upgrade
       # each distribution has its own way to upgrade a package
       # see more details at bundle edit_line u_install_script
-
-      "install_script"  string => "/tmp/cf-upgrade_install.sh";
+      "install_script" string => "/tmp/cf-upgrade_install.sh";
 
     (solarisx86|solaris).enterprise::
-
       # to automatically remove or install packages on Solaris
       # admin_file is a must to have to avoid pop-up interaction
       # see more details at bundle edit_line u_admin_file
-
-      "admin_file"      string => "/tmp/cf-upgrade_admin_file";
+      "admin_file" string => "/tmp/cf-upgrade_admin_file";
 
   files:
-
-      # Remote enterprise agents (non policy hubs) that have `trigger_upgrade` defined
-
+    # Remote enterprise agents (non policy hubs) that have `trigger_upgrade` defined
     cf_upgrade.enterprise.trigger_upgrade::
-
       "$(backup_script)"
-      comment => "Create a backup script for cf-upgrade",
-      handle => "cfe_internal_update_bins_files_backup_script",
-      create => "true",
-      if => "!windows",
-      edit_defaults => u_empty_no_backup,
-      edit_line => u_backup_script,
-      perms => u_m("0755");
+        comment => "Create a backup script for cf-upgrade",
+        handle => "cfe_internal_update_bins_files_backup_script",
+        create => "true",
+        if => "!windows",
+        edit_defaults => u_empty_no_backup,
+        edit_line => u_backup_script,
+        perms => u_m("0755");
 
       "$(install_script)"
-      comment => "Create an install script for cf-upgrade",
-      handle => "cfe_internal_update_bins_files_install_script",
-      create => "true",
-      if => "!windows",
-      edit_defaults => u_empty_no_backup,
-      edit_line => u_install_script,
-      perms => u_m("0755");
+        comment => "Create an install script for cf-upgrade",
+        handle => "cfe_internal_update_bins_files_install_script",
+        create => "true",
+        if => "!windows",
+        edit_defaults => u_empty_no_backup,
+        edit_line => u_install_script,
+        perms => u_m("0755");
 
       "$(admin_file)"
-      comment => "Create solaris admin_file to automate remove and install packages",
-      handle => "cfe_internal_update_bins_files_solaris_admin_file",
-      create => "true",
-      edit_defaults => u_empty_no_backup,
-      edit_line => u_admin_file,
-      perms => u_m("0644"),
-      if => "solarisx86|solaris";
+        comment => "Create solaris admin_file to automate remove and install packages",
+        handle => "cfe_internal_update_bins_files_solaris_admin_file",
+        create => "true",
+        edit_defaults => u_empty_no_backup,
+        edit_line => u_admin_file,
+        perms => u_m("0644"),
+        if => "solarisx86|solaris";
 
   packages:
     # Only non policy hubs running are allowed to self upgrade
     # We don't upgrade during bootstrap
-
     !(am_policy_hub|policy_server|bootstrap_mode).enterprise_edition::
-
       "$(cfengine_software.pkg_name)"
         comment => "Update Nova package to a newer version",
         handle => "cfe_internal_update_bins_packages_nova_update",
@@ -509,11 +547,10 @@ bundle agent cfengine_software_version_packages1
         package_select => "==",
         package_architectures => { "$(cfengine_software.pkg_arch)" },
         package_version => "$(desired_version)",
-        package_method => u_generic( $(cfengine_software.local_software_dir) ),
+        package_method => u_generic($(cfengine_software.local_software_dir)),
         classes => u_if_else("bin_update_success", "bin_update_fail");
 
   reports:
-
     "DEBUG|DEBUG_$(this.bundle)"::
       "Running $(this.bundle)";
 }
@@ -522,98 +559,141 @@ bundle common cfengine_package_names
 # @brief Maps platforms to the package naming convention used by the self upgrade policy
 {
   vars:
-      "pkg_name" string => "$(cfengine_software.pkg_name)";
-      "pkg_version" string => "$(cfengine_software.pkg_version)";
-      "pkg_release" string => "$(cfengine_software.pkg_release)";
-      "pkg_arch" string => "$(cfengine_software.pkg_arch)";
+    "pkg_name" string => "$(cfengine_software.pkg_name)";
+    "pkg_version" string => "$(cfengine_software.pkg_version)";
+    "pkg_release" string => "$(cfengine_software.pkg_release)";
+    "pkg_arch" string => "$(cfengine_software.pkg_arch)";
 
-      # Redhat/Centos/Oracle 5, SuSE 11 use the same package
+    # Redhat/Centos/Oracle 5, SuSE 11 use the same package
+    "pkg[redhat_5_x86_64]"
+      string => "$(pkg_name)-$(pkg_version)-$(pkg_release).el5.centos.x86_64.rpm";
 
-      "pkg[redhat_5_x86_64]" string => "$(pkg_name)-$(pkg_version)-$(pkg_release).el5.centos.x86_64.rpm";
-      "pkg[centos_5_x86_64]" string => "$(pkg[redhat_5_x86_64])";
-      "pkg[oracle_5_x86_64]" string => "$(pkg[redhat_5_x86_64])";
-      "pkg[SuSE_11_x86_64]" string => "$(pkg[redhat_5_x86_64])";
+    "pkg[centos_5_x86_64]" string => "$(pkg[redhat_5_x86_64])";
+    "pkg[oracle_5_x86_64]" string => "$(pkg[redhat_5_x86_64])";
+    "pkg[SuSE_11_x86_64]" string => "$(pkg[redhat_5_x86_64])";
 
-      # 32bit RPMs
-      "pkg[$(cfengine_master_software_content._rpm_dists)_$(cfengine_master_software_content._32bit_arches)]" string => "$(pkg_name)-$(pkg_version)-$(pkg_release).el5.centos.i386.rpm";
+    # 32bit RPMs
+    "pkg[$(cfengine_master_software_content._rpm_dists)_$(cfengine_master_software_content._32bit_arches)]"
+      string => "$(pkg_name)-$(pkg_version)-$(pkg_release).el5.centos.i386.rpm";
 
-      # Redhat/Centos/Oracle 6, SuSE 12-15, Opensuse Leap 15 use the same package
+    # Redhat/Centos/Oracle 6, SuSE 12-15, Opensuse Leap 15 use the same package
+    "pkg[redhat_6_x86_64]"
+      string => "$(pkg_name)-$(pkg_version)-$(pkg_release).el6.x86_64.rpm";
 
-      "pkg[redhat_6_x86_64]" string => "$(pkg_name)-$(pkg_version)-$(pkg_release).el6.x86_64.rpm";
-      "pkg[centos_6_x86_64]" string => "$(pkg[redhat_6_x86_64])";
-      "pkg[oracle_6_x86_64]" string => "$(pkg[redhat_6_x86_64])";
-      "pkg[SuSE_12_x86_64]" string => "$(pkg[redhat_6_x86_64])";
-      "pkg[SuSE_15_x86_64]" string => "$(pkg[redhat_6_x86_64])";
-      "pkg[opensuse_leap_15_x86_64]" string => "$(pkg[redhat_6_x86_64])";
+    "pkg[centos_6_x86_64]" string => "$(pkg[redhat_6_x86_64])";
+    "pkg[oracle_6_x86_64]" string => "$(pkg[redhat_6_x86_64])";
+    "pkg[SuSE_12_x86_64]" string => "$(pkg[redhat_6_x86_64])";
+    "pkg[SuSE_15_x86_64]" string => "$(pkg[redhat_6_x86_64])";
+    "pkg[opensuse_leap_15_x86_64]" string => "$(pkg[redhat_6_x86_64])";
 
-      # Redhat/Centos/Oracle/Rocky 7/Amazon 2 use the same package
-      "pkg[redhat_7_x86_64]" string => "$(pkg_name)-$(pkg_version)-$(pkg_release).el7.x86_64.rpm";
-      "pkg[centos_7_x86_64]" string => "$(pkg[redhat_7_x86_64])";
-      "pkg[oracle_7_x86_64]" string => "$(pkg[redhat_7_x86_64])";
-      "pkg[rocky_7_x86_64]" string => "$(pkg[redhat_7_x86_64])";
-      "pkg[amazon_2_x86_64]" string => "$(pkg[redhat_7_x86_64])";
+    # Redhat/Centos/Oracle/Rocky 7/Amazon 2 use the same package
+    "pkg[redhat_7_x86_64]"
+      string => "$(pkg_name)-$(pkg_version)-$(pkg_release).el7.x86_64.rpm";
 
-      # Redhat/Centos/Oracle/Rocky 8 use the same package
-      "pkg[redhat_8_x86_64]" string => "$(pkg_name)-$(pkg_version)-$(pkg_release).el8.x86_64.rpm";
-      "pkg[centos_8_x86_64]" string => "$(pkg[redhat_8_x86_64])";
-      "pkg[oracle_8_x86_64]" string => "$(pkg[redhat_8_x86_64])";
-      "pkg[rocky_8_x86_64]" string => "$(pkg[redhat_8_x86_64])";
+    "pkg[centos_7_x86_64]" string => "$(pkg[redhat_7_x86_64])";
+    "pkg[oracle_7_x86_64]" string => "$(pkg[redhat_7_x86_64])";
+    "pkg[rocky_7_x86_64]" string => "$(pkg[redhat_7_x86_64])";
+    "pkg[amazon_2_x86_64]" string => "$(pkg[redhat_7_x86_64])";
 
-      # Redhat/Centos/Oracle/Rocky 9 use the same package
-      "pkg[redhat_9_x86_64]" string => "$(pkg_name)-$(pkg_version)-$(pkg_release).el9.x86_64.rpm";
-      "pkg[centos_9_x86_64]" string => "$(pkg[redhat_9_x86_64])";
-      "pkg[oracle_9_x86_64]" string => "$(pkg[redhat_9_x86_64])";
-      "pkg[rocky_9_x86_64]" string => "$(pkg[redhat_9_x86_64])";
+    # Redhat/Centos/Oracle/Rocky 8 use the same package
+    "pkg[redhat_8_x86_64]"
+      string => "$(pkg_name)-$(pkg_version)-$(pkg_release).el8.x86_64.rpm";
 
-      # Redhat/Centos/Oracle/Rocky 10 use the same package
-      "pkg[redhat_10_x86_64]" string => "$(pkg_name)-$(pkg_version)-$(pkg_release).el10.x86_64.rpm";
-      "pkg[centos_10_x86_64]" string => "$(pkg[redhat_10_x86_64])";
-      "pkg[oracle_10_x86_64]" string => "$(pkg[redhat_10_x86_64])";
-      "pkg[rocky_10_x86_64]" string => "$(pkg[redhat_10_x86_64])";
+    "pkg[centos_8_x86_64]" string => "$(pkg[redhat_8_x86_64])";
+    "pkg[oracle_8_x86_64]" string => "$(pkg[redhat_8_x86_64])";
+    "pkg[rocky_8_x86_64]" string => "$(pkg[redhat_8_x86_64])";
 
+    # Redhat/Centos/Oracle/Rocky 9 use the same package
+    "pkg[redhat_9_x86_64]"
+      string => "$(pkg_name)-$(pkg_version)-$(pkg_release).el9.x86_64.rpm";
 
-      # 64bit Debian
+    "pkg[centos_9_x86_64]" string => "$(pkg[redhat_9_x86_64])";
+    "pkg[oracle_9_x86_64]" string => "$(pkg[redhat_9_x86_64])";
+    "pkg[rocky_9_x86_64]" string => "$(pkg[redhat_9_x86_64])";
 
-      "pkg[debian_7_x86_64]"  string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian7_amd64.deb";
-      "pkg[debian_8_x86_64]"  string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian8_amd64.deb";
-      "pkg[debian_9_x86_64]"  string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian9_amd64.deb";
-      "pkg[debian_10_x86_64]" string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian10_amd64.deb";
-      "pkg[debian_11_x86_64]" string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian11_amd64.deb";
-      "pkg[debian_12_x86_64]" string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian12_amd64.deb";
-      "pkg[debian_13_x86_64]" string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian13_amd64.deb";
+    # Redhat/Centos/Oracle/Rocky 10 use the same package
+    "pkg[redhat_10_x86_64]"
+      string => "$(pkg_name)-$(pkg_version)-$(pkg_release).el10.x86_64.rpm";
 
-      # 64bit Ubuntu
-      "pkg[ubuntu_14_x86_64]" string => "$(pkg_name)_$(pkg_version)-$(pkg_release).ubuntu14_amd64.deb";
-      "pkg[ubuntu_16_x86_64]" string => "$(pkg_name)_$(pkg_version)-$(pkg_release).ubuntu16_amd64.deb";
-      "pkg[ubuntu_18_x86_64]" string => "$(pkg_name)_$(pkg_version)-$(pkg_release).ubuntu18_amd64.deb";
-      "pkg[ubuntu_20_x86_64]" string => "$(pkg_name)_$(pkg_version)-$(pkg_release).ubuntu20_amd64.deb";
-      "pkg[ubuntu_22_x86_64]" string => "$(pkg_name)_$(pkg_version)-$(pkg_release).ubuntu22_amd64.deb";
-      "pkg[ubuntu_24_x86_64]" string => "$(pkg_name)_$(pkg_version)-$(pkg_release).ubuntu24_amd64.deb";
+    "pkg[centos_10_x86_64]" string => "$(pkg[redhat_10_x86_64])";
+    "pkg[oracle_10_x86_64]" string => "$(pkg[redhat_10_x86_64])";
+    "pkg[rocky_10_x86_64]" string => "$(pkg[redhat_10_x86_64])";
 
-      # aarch64 Ubuntu
-      "pkg[ubuntu_22_arm_64]" string => "$(pkg_name)_$(pkg_version)-$(pkg_release).ubuntu22_arm64.deb";
-      "pkg[ubuntu_24_arm_64]" string => "$(pkg_name)_$(pkg_version)-$(pkg_release).ubuntu24_arm64.deb";
+    # 64bit Debian
+    "pkg[debian_7_x86_64]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian7_amd64.deb";
 
-      # aarch64 Debian
-      "pkg[debian_11_arm_64]" string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian11_arm64.deb";
-      "pkg[debian_12_arm_64]" string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian12_arm64.deb";
-      "pkg[debian_13_arm_64]" string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian13_arm64.deb";
+    "pkg[debian_8_x86_64]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian8_amd64.deb";
 
-      # 32bit DEBs
-      "pkg[$(cfengine_master_software_content._deb_dists)_$(cfengine_master_software_content._32bit_arches)]" string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian7_i386.deb";
+    "pkg[debian_9_x86_64]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian9_amd64.deb";
 
-      # Windows
-      "pkg[windows_x86_64]" string => "$(pkg_name)-$(pkg_version)-$(pkg_release)-x86_64.msi";
-      "pkg[windows_i686]" string => "$(pkg_name)-$(pkg_version)-$(pkg_release)-i686.msi";
+    "pkg[debian_10_x86_64]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian10_amd64.deb";
 
-      "my_pkg"
-        string => "$(pkg[$(cfengine_software.package_dir)])",
-        comment => "The package name for the currently executing platform.";
+    "pkg[debian_11_x86_64]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian11_amd64.deb";
+
+    "pkg[debian_12_x86_64]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian12_amd64.deb";
+
+    "pkg[debian_13_x86_64]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian13_amd64.deb";
+
+    # 64bit Ubuntu
+    "pkg[ubuntu_14_x86_64]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).ubuntu14_amd64.deb";
+
+    "pkg[ubuntu_16_x86_64]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).ubuntu16_amd64.deb";
+
+    "pkg[ubuntu_18_x86_64]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).ubuntu18_amd64.deb";
+
+    "pkg[ubuntu_20_x86_64]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).ubuntu20_amd64.deb";
+
+    "pkg[ubuntu_22_x86_64]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).ubuntu22_amd64.deb";
+
+    "pkg[ubuntu_24_x86_64]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).ubuntu24_amd64.deb";
+
+    # aarch64 Ubuntu
+    "pkg[ubuntu_22_arm_64]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).ubuntu22_arm64.deb";
+
+    "pkg[ubuntu_24_arm_64]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).ubuntu24_arm64.deb";
+
+    # aarch64 Debian
+    "pkg[debian_11_arm_64]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian11_arm64.deb";
+
+    "pkg[debian_12_arm_64]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian12_arm64.deb";
+
+    "pkg[debian_13_arm_64]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian13_arm64.deb";
+
+    # 32bit DEBs
+    "pkg[$(cfengine_master_software_content._deb_dists)_$(cfengine_master_software_content._32bit_arches)]"
+      string => "$(pkg_name)_$(pkg_version)-$(pkg_release).debian7_i386.deb";
+
+    # Windows
+    "pkg[windows_x86_64]"
+      string => "$(pkg_name)-$(pkg_version)-$(pkg_release)-x86_64.msi";
+
+    "pkg[windows_i686]"
+      string => "$(pkg_name)-$(pkg_version)-$(pkg_release)-i686.msi";
+
+    "my_pkg"
+      string => "$(pkg[$(cfengine_software.package_dir)])",
+      comment => "The package name for the currently executing platform.";
 
   reports:
-
     "DEBUG|DEBUG_$(this.bundle)"::
-
       "My Package: $(my_pkg)";
 }
 
@@ -622,122 +702,145 @@ bundle agent cfengine_master_software_content
 # will try be be automatically downloaded.
 {
   vars:
-      "pkg_name" string => "$(cfengine_software.pkg_name)";
-      "pkg_version" string => "$(cfengine_software.pkg_version)";
-      "pkg_release" string => "$(cfengine_software.pkg_release)";
-      "pkg_arch" string => "$(cfengine_software.pkg_arch)";
-      "package_dir" string => "$(cfengine_software.package_dir)";
-      "pkg_edition" string => "$(cfengine_software.pkg_edition_path)";
-      "base_url" string => "https://cfengine-package-repos.s3.amazonaws.com/$(pkg_edition)";
+    "pkg_name" string => "$(cfengine_software.pkg_name)";
+    "pkg_version" string => "$(cfengine_software.pkg_version)";
+    "pkg_release" string => "$(cfengine_software.pkg_release)";
+    "pkg_arch" string => "$(cfengine_software.pkg_arch)";
+    "package_dir" string => "$(cfengine_software.package_dir)";
+    "pkg_edition" string => "$(cfengine_software.pkg_edition_path)";
 
-      # Map platform/directory identifier to upstream package URLs
-      # Better to read in an external explicit data structure?
+    "base_url"
+      string => "https://cfengine-package-repos.s3.amazonaws.com/$(pkg_edition)";
 
-      "_32bit_arches" slist => { "i386", "i586", "i686" };
+    # Map platform/directory identifier to upstream package URLs
+    # Better to read in an external explicit data structure?
+    "_32bit_arches" slist => { "i386", "i586", "i686" };
 
-      # Redhat/Centos/Oracle 5 and SuSE 11 all use the same package
-      "dir[redhat_5_x86_64]" string => "agent_rpm_x86_64";
-      "dir[centos_5_x86_64]" string => "$(dir[redhat_5_x86_64])";
-      "dir[oracle_5_x86_64]" string => "$(dir[redhat_5_x86_64])";
-      "dir[SuSE_11_x86_64]" string => "$(dir[redhat_5_x86_64])";
-      "pkg[SuSE_12_x86_64]" string => "$(pkg[redhat_6_x86_64])";
-      "pkg[SuSE_15_x86_64]" string => "$(pkg[redhat_6_x86_64])";
-      "pkg[opensuse_leap_15_x86_64]" string => "$(pkg[redhat_6_x86_64])";
+    # Redhat/Centos/Oracle 5 and SuSE 11 all use the same package
+    "dir[redhat_5_x86_64]" string => "agent_rpm_x86_64";
+    "dir[centos_5_x86_64]" string => "$(dir[redhat_5_x86_64])";
+    "dir[oracle_5_x86_64]" string => "$(dir[redhat_5_x86_64])";
+    "dir[SuSE_11_x86_64]" string => "$(dir[redhat_5_x86_64])";
+    "pkg[SuSE_12_x86_64]" string => "$(pkg[redhat_6_x86_64])";
+    "pkg[SuSE_15_x86_64]" string => "$(pkg[redhat_6_x86_64])";
+    "pkg[opensuse_leap_15_x86_64]" string => "$(pkg[redhat_6_x86_64])";
 
+    # All 32bit rpms use the same package
+    "_rpm_dists"
+      slist => {
+        "redhat_5",
+        "redhat_6",
+        "redhat_7",
+        "centos_5",
+        "centos_6",
+        "centos_7",
+        "SuSE_11",
+        "SuSE_10",
+      };
 
-      # All 32bit rpms use the same package
-      "_rpm_dists" slist => { "redhat_5", "redhat_6", "redhat_7",
-                              "centos_5", "centos_6", "centos_7",
-                              "SuSE_11", "SuSE_10" };
+    "dir[$(_rpm_dists)_$(_32bit_arches)]" string => "agent_rpm_i386";
 
-      "dir[$(_rpm_dists)_$(_32bit_arches)]" string => "agent_rpm_i386";
+    # Redhat/Centos/Oracle 6 use the same package
+    "dir[redhat_6_x86_64]" string => "agent_rhel6_x86_64";
+    "dir[centos_6_x86_64]" string => "$(dir[redhat_6_x86_64])";
+    "dir[oracle_6_x86_64]" string => "$(dir[redhat_6_x86_64])";
 
-      # Redhat/Centos/Oracle 6 use the same package
-      "dir[redhat_6_x86_64]" string => "agent_rhel6_x86_64";
-      "dir[centos_6_x86_64]" string => "$(dir[redhat_6_x86_64])";
-      "dir[oracle_6_x86_64]" string => "$(dir[redhat_6_x86_64])";
+    # Redhat/Centos/Oracle/Rocky 7/Amazon 2 use the same package
+    "dir[redhat_7_x86_64]" string => "agent_rhel7_x86_64";
+    "dir[centos_7_x86_64]" string => "$(dir[redhat_7_x86_64])";
+    "dir[oracle_7_x86_64]" string => "$(dir[redhat_7_x86_64])";
+    "dir[rocky_7_x86_64]" string => "$(dir[redhat_7_x86_64])";
+    "dir[amazon_2_x86_64]" string => "$(dir[redhat_7_x86_64])";
 
-      # Redhat/Centos/Oracle/Rocky 7/Amazon 2 use the same package
-      "dir[redhat_7_x86_64]" string => "agent_rhel7_x86_64";
-      "dir[centos_7_x86_64]" string => "$(dir[redhat_7_x86_64])";
-      "dir[oracle_7_x86_64]" string => "$(dir[redhat_7_x86_64])";
-      "dir[rocky_7_x86_64]" string => "$(dir[redhat_7_x86_64])";
-      "dir[amazon_2_x86_64]" string => "$(dir[redhat_7_x86_64])";
+    # Redhat/Centos/Oracle/Rocky 8 use the same package
+    "dir[redhat_8_x86_64]" string => "agent_rhel8_x86_64";
+    "dir[centos_8_x86_64]" string => "$(dir[redhat_8_x86_64])";
+    "dir[oracle_8_x86_64]" string => "$(dir[redhat_8_x86_64])";
+    "dir[rocky_8_x86_64]" string => "$(dir[redhat_8_x86_64])";
 
-      # Redhat/Centos/Oracle/Rocky 8 use the same package
-      "dir[redhat_8_x86_64]" string => "agent_rhel8_x86_64";
-      "dir[centos_8_x86_64]" string => "$(dir[redhat_8_x86_64])";
-      "dir[oracle_8_x86_64]" string => "$(dir[redhat_8_x86_64])";
-      "dir[rocky_8_x86_64]" string => "$(dir[redhat_8_x86_64])";
+    # Redhat/Centos/Oracle/Rocky 9 use the same package
+    "dir[redhat_9_x86_64]" string => "agent_rhel9_x86_64";
+    "dir[centos_9_x86_64]" string => "$(dir[redhat_9_x86_64])";
+    "dir[oracle_9_x86_64]" string => "$(dir[redhat_9_x86_64])";
+    "dir[rocky_9_x86_64]" string => "$(dir[redhat_9_x86_64])";
 
-      # Redhat/Centos/Oracle/Rocky 9 use the same package
-      "dir[redhat_9_x86_64]" string => "agent_rhel9_x86_64";
-      "dir[centos_9_x86_64]" string => "$(dir[redhat_9_x86_64])";
-      "dir[oracle_9_x86_64]" string => "$(dir[redhat_9_x86_64])";
-      "dir[rocky_9_x86_64]" string => "$(dir[redhat_9_x86_64])";
+    # Redhat/Centos/Oracle/Rocky 10 use the same package
+    "dir[redhat_10_x86_64]" string => "agent_rhel10_x86_64";
+    "dir[centos_10_x86_64]" string => "$(dir[redhat_10_x86_64])";
+    "dir[oracle_10_x86_64]" string => "$(dir[redhat_10_x86_64])";
+    "dir[rocky_10_x86_64]" string => "$(dir[redhat_10_x86_64])";
 
-      # Redhat/Centos/Oracle/Rocky 10 use the same package
-      "dir[redhat_10_x86_64]" string => "agent_rhel10_x86_64";
-      "dir[centos_10_x86_64]" string => "$(dir[redhat_10_x86_64])";
-      "dir[oracle_10_x86_64]" string => "$(dir[redhat_10_x86_64])";
-      "dir[rocky_10_x86_64]" string => "$(dir[redhat_10_x86_64])";
+    # Debian
+    "dir[debian_7_x86_64]" string => "agent_deb_x86_64";
+    "dir[debian_8_x86_64]" string => "agent_debian8_x86_64";
+    "dir[debian_9_x86_64]" string => "agent_debian9_x86_64";
+    "dir[debian_10_x86_64]" string => "agent_debian10_x86_64";
+    "dir[debian_11_x86_64]" string => "agent_debian11_x86_64";
+    "dir[debian_11_arm_64]" string => "agent_debian11_arm_64";
+    "dir[debian_12_x86_64]" string => "agent_debian12_x86_64";
+    "dir[debian_13_x86_64]" string => "agent_debian13_x86_64";
+    "dir[debian_12_arm_64]" string => "agent_debian12_arm_64";
+    "dir[debian_13_arm_64]" string => "agent_debian13_arm_64";
 
-      # Debian
-      "dir[debian_7_x86_64]" string => "agent_deb_x86_64";
-      "dir[debian_8_x86_64]" string => "agent_debian8_x86_64";
-      "dir[debian_9_x86_64]" string => "agent_debian9_x86_64";
-      "dir[debian_10_x86_64]" string => "agent_debian10_x86_64";
-      "dir[debian_11_x86_64]" string => "agent_debian11_x86_64";
-      "dir[debian_11_arm_64]" string => "agent_debian11_arm_64";
-      "dir[debian_12_x86_64]" string => "agent_debian12_x86_64";
-      "dir[debian_13_x86_64]" string => "agent_debian13_x86_64";
-      "dir[debian_12_arm_64]" string => "agent_debian12_arm_64";
-      "dir[debian_13_arm_64]" string => "agent_debian13_arm_64";
+    # Ubuntu
+    "dir[ubuntu_14_x86_64]" string => "agent_ubuntu14_x86_64";
+    "dir[ubuntu_16_x86_64]" string => "agent_ubuntu16_x86_64";
+    "dir[ubuntu_18_x86_64]" string => "agent_ubuntu18_x86_64";
+    "dir[ubuntu_20_x86_64]" string => "agent_ubuntu20_x86_64";
+    "dir[ubuntu_22_x86_64]" string => "agent_ubuntu22_x86_64";
+    "dir[ubuntu_22_arm_64]" string => "agent_ubuntu22_arm_64";
+    "dir[ubuntu_24_x86_64]" string => "agent_ubuntu24_x86_64";
+    "dir[ubuntu_24_arm_64]" string => "agent_ubuntu24_arm_64";
 
-      # Ubuntu
-      "dir[ubuntu_14_x86_64]" string => "agent_ubuntu14_x86_64";
-      "dir[ubuntu_16_x86_64]" string => "agent_ubuntu16_x86_64";
-      "dir[ubuntu_18_x86_64]" string => "agent_ubuntu18_x86_64";
-      "dir[ubuntu_20_x86_64]" string => "agent_ubuntu20_x86_64";
-      "dir[ubuntu_22_x86_64]" string => "agent_ubuntu22_x86_64";
-      "dir[ubuntu_22_arm_64]" string => "agent_ubuntu22_arm_64";
-      "dir[ubuntu_24_x86_64]" string => "agent_ubuntu24_x86_64";
-      "dir[ubuntu_24_arm_64]" string => "agent_ubuntu24_arm_64";
+    # All 32bit debs use the same package
+    "_deb_dists"
+      slist => {
+        "debian_4",
+        "debian_5",
+        "debian_6",
+        "debian_7",
+        "debian_8",
+        "debian_9",
+        "debian_10",
+        "ubuntu_14",
+        "ubuntu_16",
+        "ubuntu_18",
+      };
 
-      # All 32bit debs use the same package
-      "_deb_dists" slist => { "debian_4", "debian_5", "debian_6",
-                              "debian_7", "debian_8", "debian_9",
-                              "debian_10", "ubuntu_14", "ubuntu_16",
-                              "ubuntu_18" };
+    "dir[$(_deb_dists)_$(_32bit_arches)]" string => "agent_deb_i386";
 
-      "dir[$(_deb_dists)_$(_32bit_arches)]" string => "agent_deb_i386";
-
-      # Windows
-      "dir[windows_x86_64]" string => "windows_x86_64";
-      "dir[windows_i686]"   string => "windows_i686";
-
-      "platform_dir" slist => getindices( dir );
-      "download_dir" string => "$(sys.workdir)/master_software_updates";
+    # Windows
+    "dir[windows_x86_64]" string => "windows_x86_64";
+    "dir[windows_i686]" string => "windows_i686";
+    "platform_dir" slist => getindices(dir);
+    "download_dir" string => "$(sys.workdir)/master_software_updates";
 
   files:
-      "$(download_dir)/$(platform_dir)/."
-       create => "true",
-       comment => "We need a place to download each packge we build";
+    "$(download_dir)/$(platform_dir)/."
+      create => "true",
+      comment => "We need a place to download each packge we build";
 
-      "$(download_dir)/$(cfengine_software.pkg_version)-downloaded.txt"
-        content => join( "\n", classesmatching( "binary_downloaded_.*" ) ),
-        if => isgreaterthan( length(classesmatching( "binary_downloaded_.*" )),
-                             0 ),
-        comment => concat( "We place a marker of the files downloaded so that",
-                           " the hub can skip the self upgrade policy after",
-                           " download.");
+    "$(download_dir)/$(cfengine_software.pkg_version)-downloaded.txt"
+      content => join("\n", classesmatching("binary_downloaded_.*")),
+      if => isgreaterthan(length(classesmatching("binary_downloaded_.*")), 0),
+      comment => concat(
+        "We place a marker of the files downloaded so that",
+        " the hub can skip the self upgrade policy after",
+        " download."
+      );
 
   commands:
-      # Fetch each package that we don't already have
-       "/usr/bin/curl"
-        args => "-s $(base_url)/$(dir[$(platform_dir)])/$(cfengine_package_names.pkg[$(platform_dir)]) --output /var/cfengine/master_software_updates/$(platform_dir)/$(cfengine_package_names.pkg[$(platform_dir)])",
-        if => not( fileexists( "$(download_dir)/$(platform_dir)/$(cfengine_package_names.pkg[$(platform_dir)])" ) ),
-        classes => u_if_else("binary_downloaded_$(platform_dir)","binary_not_downloaded");
+    # Fetch each package that we don't already have
+    "/usr/bin/curl"
+      args => "-s $(base_url)/$(dir[$(platform_dir)])/$(cfengine_package_names.pkg[$(platform_dir)]) --output /var/cfengine/master_software_updates/$(platform_dir)/$(cfengine_package_names.pkg[$(platform_dir)])",
+      if => not(
+        fileexists(
+          "$(download_dir)/$(platform_dir)/$(cfengine_package_names.pkg[$(platform_dir)])"
+        )
+      ),
+      classes => u_if_else(
+        "binary_downloaded_$(platform_dir)", "binary_not_downloaded"
+      );
 
   reports:
     DEBUG|DEBUG_cfengine_master_software_content::
@@ -748,9 +851,7 @@ bundle edit_line u_backup_script
 # @brief Backup script used by cf-upgrade
 {
   insert_lines:
-
     linux::
-
       "#!/bin/sh
 
 if [ $(const.dollar)1 = \"BACKUP\" ]; then
@@ -761,7 +862,6 @@ if [ $(const.dollar)1 = \"RESTORE\" ]; then
 fi";
 
     solarisx86|solaris::
-
       "#!/bin/sh
 
 if [ $(const.dollar)1 = \"BACKUP\" ]; then
@@ -770,27 +870,23 @@ fi
 if [ $(const.dollar)1 = \"RESTORE\" ]; then
  gunzip $(const.dollar)2.gz; tar xf $(const.dollar)2
 fi";
-
 }
+
 bundle edit_line u_install_script
 # @brief Install script used by cf-upgrade
 {
   insert_lines:
-
     redhat|suse|sles::
-
       "#!/bin/sh
 
 /bin/rpm -U $(const.dollar)1";
 
     debian::
-
       "#!/bin/sh
 
 /usr/bin/dpkg --force-confdef --force-confnew --install $(const.dollar)1 > /dev/null";
 
     solarisx86|solaris::
-
       "#!/bin/sh
 
 pkgname=`pkginfo -d $(const.dollar)1 | awk '{print $(const.dollar)2}'`
@@ -798,17 +894,13 @@ pkgname=`pkginfo -d $(const.dollar)1 | awk '{print $(const.dollar)2}'`
 /usr/sbin/pkgadd -n -a $(cfengine_software_version_packages1.admin_file) -d $(const.dollar)1 all
 $(sys.workdir)/bin/cf-execd || true
 exit 0";
-
 }
-
 
 bundle edit_line u_admin_file
 # @brief Admin file specification to enable unattended installation
 {
   insert_lines:
-
     sunos_5_8::
-
       "mail=
 instance=unique
 partial=nocheck
@@ -822,7 +914,6 @@ action=nocheck
 basedir=default";
 
     solaris.!sunos_5_8::
-
       "mail=
 instance=overwrite
 partial=nocheck
@@ -839,338 +930,291 @@ authentication=quit
 keystore=/var/sadm/security
 proxy=
 basedir=default";
-
 }
 
 body action u_immediate
 # @brief Ignore promise locks, actuate the promise immediately
 {
-      ifelapsed => "0";
+  ifelapsed => "0";
 }
 
-body copy_from u_dsync(from,server)
+body copy_from u_dsync(from, server)
 # @brief Synchronize promiser with `from` on `server` using digest comparison. If host is a policy hub, then it skips the remote copy, preferring the local file path. For this reason, this body is not compatible with shortcuts defined by cf-serverd.
 # @param from File path to copy from on remote server
 # @param server Remote server to copy file from if executing host is not a policy server
 {
-      # NOTE policy servers cheat and copy directly from the local file system.
-      # This works even if cf-serverd is down and it makes sense if your serving
-      # yourself.
+  # NOTE policy servers cheat and copy directly from the local file system.
+  # This works even if cf-serverd is down and it makes sense if your serving
+  # yourself.
+  source => "$(from)";
+  compare => "digest";
+  trustkey => "false";
+  purge => "true";
 
-      source      => "$(from)";
-      compare     => "digest";
-      trustkey    => "false";
-      purge       => "true";
+  !am_policy_hub::
+    servers => { "$(server)" };
 
-    !am_policy_hub::
-
-      servers => { "$(server)" };
-
-    cfengine_internal_encrypt_transfers::
-
-      encrypt => "true";
+  cfengine_internal_encrypt_transfers::
+    encrypt => "true";
 }
 
 body classes u_if_repaired(x)
 # @brief Define `x` if promise results in a repair
 # @param x Name of the class to be defined if promise results in repair
 {
-      promise_repaired => { "$(x)" };
+  promise_repaired => { "$(x)" };
 }
-body classes u_if_else(yes,no)
+
+body classes u_if_else(yes, no)
 # @brief Define `yes` if promise results in a repair, `no` if promise is not kept (failed, denied, timeout)
 # @param yes class to define if promise results in repair
 # @param no class to define if promise is not kept (failed, denied, timeout)
 {
-      # promise_kept     => { "$(yes)" };
-      promise_repaired => { "$(yes)" };
-      repair_failed    => { "$(no)" };
-      repair_denied    => { "$(no)" };
-      repair_timeout   => { "$(no)" };
+  # promise_kept     => { "$(yes)" };
+  promise_repaired => { "$(yes)" };
+  repair_failed => { "$(no)" };
+  repair_denied => { "$(no)" };
+  repair_timeout => { "$(no)" };
 }
 
 body common control
 # @brief Common control for standalone self upgrade
 {
-      version => "CFEngine Standalone Self Upgrade 3.28.0";
+  version => "CFEngine Standalone Self Upgrade 3.28.0";
 
+  control_common_tls_min_version_defined::
+    tls_min_version => "$(default:def.control_common_tls_min_version)"; # See also: allowtlsversion in body server control
+  control_common_tls_ciphers_defined::
+    tls_ciphers => "$(default:def.control_common_tls_ciphers)"; # See also: allowciphers in body server control
+  (debian|ubuntu)::
+    package_inventory => { $(package_module_knowledge.platform_default) };
 
-    control_common_tls_min_version_defined::
-        tls_min_version => "$(default:def.control_common_tls_min_version)"; # See also: allowtlsversion in body server control
+  # We only define pacakge_inventory on redhat like systems that have a
+  # python version that works with the package module.
+  (redhat|centos)::
+    package_inventory => { $(package_module_knowledge.platform_default) };
 
-    control_common_tls_ciphers_defined::
-        tls_ciphers => "$(default:def.control_common_tls_ciphers)"; # See also: allowciphers in body server control
+  (debian|redhat)::
+    package_module => $(package_module_knowledge.platform_default);
 
-    (debian|ubuntu)::
-      package_inventory => { $(package_module_knowledge.platform_default) };
+  control_common_system_log_level_defined::
+    system_log_level => "$(default:def.control_common_system_log_level)";
 
-      # We only define pacakge_inventory on redhat like systems that have a
-      # python version that works with the package module.
-
-    (redhat|centos)::
-      package_inventory => { $(package_module_knowledge.platform_default) };
-
-    (debian|redhat)::
-      package_module => $(package_module_knowledge.platform_default);
-
-    control_common_system_log_level_defined::
-        system_log_level => "$(default:def.control_common_system_log_level)";
-
-    control_common_protocol_version_defined::
-        protocol_version => "$(default:def.control_common_protocol_version)";
+  control_common_protocol_version_defined::
+    protocol_version => "$(default:def.control_common_protocol_version)";
 }
 
 body depth_search u_recurse_basedir(d)
 # @brief Search recursively from (and including) the referenced directory directory to depth `d` excluding common version control paths
 # @param d maximum depth to descend
 {
-      include_basedir => "true";
-      depth => "$(d)";
-      exclude_dirs => { "\.svn", "\.git", "git-core" };
+  include_basedir => "true";
+  depth => "$(d)";
+  exclude_dirs => { "\.svn", "\.git", "git-core" };
 }
 
 body edit_defaults u_empty_no_backup
 # @brief Do not create backups and ensure we are promising the entire content of
 # the file.
 {
-      empty_file_before_editing => "true";
-      edit_backup => "false";
+  empty_file_before_editing => "true";
+  edit_backup => "false";
 }
 
 body file_select plain
 # @brief Select plain, regular files
 {
-      file_types  => { "plain" };
-      file_result => "file_types";
+  file_types => { "plain" };
+  file_result => "file_types";
 }
 
 body package_method u_generic(repo)
 # @brief Generic package_method capable of managing packages on multiple platforms.
 # @param repo Local directory to look for packages in
 {
+  debian::
+    package_changes => "individual";
+    package_list_command => "/usr/bin/dpkg -l";
 
-    debian::
+    # package_list_update_command => "/usr/bin/apt-get update";
+    package_list_update_ifelapsed => "$(u_common_knowledge.list_update_ifelapsed_now)";
+    package_list_name_regex => "ii\s+([^\s:]+).*";
 
-        package_changes => "individual";
-        package_list_command => "/usr/bin/dpkg -l";
+    # package_list_version_regex => "ii\s+[^\s]+\s+([^\s]+).*";
+    package_list_version_regex => "ii\s+[^\s]+\s+(\d+\.\d+((\.|-)\d+)+).*";
+    package_installed_regex => ".*"; # all reported are installed
+    package_file_repositories => { "$(repo)" };
+    package_version_equal_command => "/usr/bin/dpkg --compare-versions '$(v1)' eq '$(v2)'";
+    package_version_less_command => "/usr/bin/dpkg --compare-versions '$(v1)' lt '$(v2)'";
 
-      # package_list_update_command => "/usr/bin/apt-get update";
-        package_list_update_ifelapsed => "$(u_common_knowledge.list_update_ifelapsed_now)";
+  debian.x86_64::
+    package_name_convention => "$(name)_$(version)_amd64.deb";
 
-        package_list_name_regex    => "ii\s+([^\s:]+).*";
-      # package_list_version_regex => "ii\s+[^\s]+\s+([^\s]+).*";
-        package_list_version_regex => "ii\s+[^\s]+\s+(\d+\.\d+((\.|-)\d+)+).*";
+  debian.i686::
+    package_name_convention => "$(name)_$(version)_i386.deb";
 
-        package_installed_regex    => ".*"; # all reported are installed
+  debian::
+    package_add_command => "/usr/bin/dpkg --force-confdef --force-confnew --install";
+    package_delete_command => "/usr/bin/dpkg --purge";
 
-        package_file_repositories  => { "$(repo)" };
-        package_version_equal_command => "/usr/bin/dpkg --compare-versions '$(v1)' eq '$(v2)'";
-        package_version_less_command => "/usr/bin/dpkg --compare-versions '$(v1)' lt '$(v2)'";
+  redhat|SuSE|suse|sles::
+    package_changes => "individual";
+    package_list_command => "/bin/rpm -qa --queryformat \"i | repos | %{name} | %{version}-%{release} | %{arch}\n\"";
+    package_list_update_ifelapsed => "$(u_common_knowledge.list_update_ifelapsed_now)";
+    package_list_name_regex => "[^|]+\|[^|]+\|\s+([^\s|]+).*";
+    package_list_version_regex => "[^|]+\|[^|]+\|[^|]+\|\s+([^\s|]+).*";
+    package_list_arch_regex => "[^|]+\|[^|]+\|[^|]+\|[^|]+\|\s+([^\s]+).*";
+    package_installed_regex => "i.*";
+    package_file_repositories => { "$(repo)" };
+    package_name_convention => "$(name)-$(version).$(arch).rpm";
+    package_add_command => "/bin/rpm -ivh ";
+    package_delete_command => "/bin/rpm -e --nodeps";
+    package_verify_command => "/bin/rpm -V";
+    package_noverify_regex => ".*[^\s].*";
+    package_version_less_command => "$(sys.bindir)/rpmvercmp '$(v1)' lt '$(v2)'";
+    package_version_equal_command => "$(sys.bindir)/rpmvercmp '$(v1)' eq '$(v2)'";
 
+  (redhat|SuSE|suse|sles|debian|solarisx86|solaris)::
+    package_update_command => "$(sys.workdir)/bin/cf-upgrade -b $(cfengine_software_version_packages1.backup_script) -s $(cfengine_software_version_packages1.backup_file) -i $(cfengine_software_version_packages1.install_script)";
 
-    debian.x86_64::
-        package_name_convention    => "$(name)_$(version)_amd64.deb";
+  redhat.!redhat_4::
+    package_list_update_command => "/usr/bin/yum --quiet check-update";
 
-    debian.i686::
-        package_name_convention    => "$(name)_$(version)_i386.deb";
+  redhat_4::
+    package_list_update_command => "/usr/bin/yum check-update";
 
-    debian::
-        package_add_command        => "/usr/bin/dpkg --force-confdef --force-confnew --install";
-        package_delete_command     => "/usr/bin/dpkg --purge";
+  SuSE|suse|sles::
+    package_list_update_command => "/usr/bin/zypper list-updates";
 
-    redhat|SuSE|suse|sles::
+  windows::
+    package_changes => "individual";
+    package_list_update_ifelapsed => "$(u_common_knowledge.list_update_ifelapsed_now)";
+    package_file_repositories => { "$(repo)" };
+    package_installed_regex => ".*";
+    package_name_convention => "$(name)-$(version)-$(arch).msi";
+    package_add_command => "\"$(sys.winsysdir)\msiexec.exe\" /qn /i";
+    package_update_command => "\"$(sys.winsysdir)\msiexec.exe\" /qn /i";
+    package_delete_command => "\"$(sys.winsysdir)\msiexec.exe\" /qn /x";
+    package_version_less_command => '$(sys.winsysdir)$(const.dirsep)WindowsPowerShell$(const.dirsep)v1.0$(const.dirsep)powershell.exe "$(sys.bindir)$(const.dirsep)vercmp.ps1" "$(v1)" "lt" "$(v2)"';
+    package_version_equal_command => '$(sys.winsysdir)$(const.dirsep)WindowsPowerShell$(const.dirsep)v1.0$(const.dirsep)powershell.exe "$(sys.bindir)$(const.dirsep)vercmp.ps1" "$(v1)" "eq" "$(v2)"';
 
-        package_changes => "individual";
+  freebsd::
+    package_changes => "individual";
+    package_list_command => "/usr/sbin/pkg_info";
+    package_list_update_command => "/usr/bin/true";
+    package_list_update_ifelapsed => "$(u_common_knowledge.list_update_ifelapsed_now)";
+    package_list_name_regex => "^(\S+)-(\d+\.?)+";
+    package_list_version_regex => "^\S+-((\d+\.?)+\_\d)";
+    package_file_repositories => { "$(repo)" };
+    package_installed_regex => ".*";
+    package_name_convention => "$(name)-$(version).tbz";
+    package_delete_convention => "$(name)-$(version)";
+    package_add_command => "/usr/sbin/pkg_add";
+    package_delete_command => "/usr/sbin/pkg_delete";
 
-        package_list_command => "/bin/rpm -qa --queryformat \"i | repos | %{name} | %{version}-%{release} | %{arch}\n\"";
+  netbsd::
+    package_changes => "individual";
+    package_list_command => "/usr/sbin/pkg_info";
+    package_list_update_command => "/usr/bin/true";
+    package_list_update_ifelapsed => "$(u_common_knowledge.list_update_ifelapsed_now)";
+    package_list_name_regex => "^(\S+)-(\d+\.?)+";
+    package_list_version_regex => "^\S+-((\d+\.?)+\nb\d)";
+    package_file_repositories => { "$(repo)" };
+    package_installed_regex => ".*";
+    package_name_convention => "$(name)-$(version).tgz";
+    package_delete_convention => "$(name)-$(version)";
+    package_add_command => "/usr/sbin/pkg_add";
+    package_delete_command => "/usr/sbin/pkg_delete";
 
-        package_list_update_ifelapsed => "$(u_common_knowledge.list_update_ifelapsed_now)";
+  solarisx86|solaris::
+    package_changes => "individual";
+    package_list_command => "/usr/bin/pkginfo -l";
+    package_list_update_command => "/usr/bin/true";
+    package_list_update_ifelapsed => "$(u_common_knowledge.list_update_ifelapsed_now)";
+    package_multiline_start => "\s*PKGINST:\s+[^\s]+";
+    package_list_name_regex => "\s*PKGINST:\s+([^\s]+)";
+    package_list_version_regex => "\s*VERSION:\s+([^\s]+)";
+    package_list_arch_regex => "\s*ARCH:\s+([^\s]+)";
+    package_file_repositories => { "$(repo)" };
+    package_installed_regex => "\s*STATUS:\s*(completely|partially)\s+installed.*";
+    package_name_convention => "$(name)-$(version)-$(arch).pkg";
+    package_delete_convention => "$(name)";
 
-        package_list_name_regex    => "[^|]+\|[^|]+\|\s+([^\s|]+).*";
-        package_list_version_regex => "[^|]+\|[^|]+\|[^|]+\|\s+([^\s|]+).*";
-        package_list_arch_regex    => "[^|]+\|[^|]+\|[^|]+\|[^|]+\|\s+([^\s]+).*";
+    # Cfengine appends path to package and package name below, respectively
+    package_add_command => "/bin/sh $(repo)/add_scr $(repo)/admin_file";
+    package_delete_command => "/usr/sbin/pkgrm -n -a $(repo)/admin_file";
 
-        package_installed_regex    => "i.*";
+  aix::
+    package_changes => "individual";
+    package_list_update_command => "/usr/bin/true";
+    package_list_update_ifelapsed => "$(u_common_knowledge.list_update_ifelapsed_now)";
+    package_list_command => "/usr/bin/lslpp -lc";
+    package_list_name_regex => "[^:]+:([^:]+):[^:]+:.*";
+    package_list_version_regex => "[^:]+:[^:]+:([^:]+):.*";
+    package_file_repositories => { "$(repo)" };
+    package_installed_regex => "[^:]+:[^:]+:[^:]+:[^:]*:(COMMITTED|APPLIED):.*";
+    package_name_convention => "$(name)-$(version).bff";
+    package_delete_convention => "$(name)";
 
-        package_file_repositories  => { "$(repo)" };
+    # Redirecting the output to '/dev/null' below makes sure 'geninstall' has
+    # its stdout open even if the 'cf-agent' process that started it
+    # terminates (e.g. gets killed).
+    package_add_command => "/usr/bin/rm -f $(repo)/.toc && /usr/sbin/geninstall -IacgXNY -d $(repo) cfengine-nova > /dev/null$";
+    package_update_command => "/usr/bin/rm -f $(repo)/.toc && /usr/sbin/geninstall -IacgXNY -d $(repo) cfengine-nova > /dev/null$";
+    package_delete_command => "/usr/sbin/installp -ug cfengine-nova$";
 
-        package_name_convention    => "$(name)-$(version).$(arch).rpm";
-
-        package_add_command        => "/bin/rpm -ivh ";
-        package_delete_command     => "/bin/rpm -e --nodeps";
-        package_verify_command     => "/bin/rpm -V";
-        package_noverify_regex     => ".*[^\s].*";
-
-        package_version_less_command => "$(sys.bindir)/rpmvercmp '$(v1)' lt '$(v2)'";
-        package_version_equal_command => "$(sys.bindir)/rpmvercmp '$(v1)' eq '$(v2)'";
-
-    (redhat|SuSE|suse|sles|debian|solarisx86|solaris)::
-        package_update_command     => "$(sys.workdir)/bin/cf-upgrade -b $(cfengine_software_version_packages1.backup_script) -s $(cfengine_software_version_packages1.backup_file) -i $(cfengine_software_version_packages1.install_script)";
-
-    redhat.!redhat_4::
-        package_list_update_command => "/usr/bin/yum --quiet check-update";
-    redhat_4::
-        package_list_update_command => "/usr/bin/yum check-update";
-    SuSE|suse|sles::
-        package_list_update_command => "/usr/bin/zypper list-updates";
-
-    windows::
-
-        package_changes => "individual";
-        package_list_update_ifelapsed => "$(u_common_knowledge.list_update_ifelapsed_now)";
-        package_file_repositories  => { "$(repo)" };
-
-        package_installed_regex    => ".*";
-
-        package_name_convention    => "$(name)-$(version)-$(arch).msi";
-
-        package_add_command        => "\"$(sys.winsysdir)\msiexec.exe\" /qn /i";
-        package_update_command     => "\"$(sys.winsysdir)\msiexec.exe\" /qn /i";
-        package_delete_command     => "\"$(sys.winsysdir)\msiexec.exe\" /qn /x";
-        package_version_less_command => '$(sys.winsysdir)$(const.dirsep)WindowsPowerShell$(const.dirsep)v1.0$(const.dirsep)powershell.exe "$(sys.bindir)$(const.dirsep)vercmp.ps1" "$(v1)" "lt" "$(v2)"';
-        package_version_equal_command => '$(sys.winsysdir)$(const.dirsep)WindowsPowerShell$(const.dirsep)v1.0$(const.dirsep)powershell.exe "$(sys.bindir)$(const.dirsep)vercmp.ps1" "$(v1)" "eq" "$(v2)"';
-
-    freebsd::
-
-        package_changes => "individual";
-
-        package_list_command => "/usr/sbin/pkg_info";
-
-        package_list_update_command => "/usr/bin/true";
-        package_list_update_ifelapsed => "$(u_common_knowledge.list_update_ifelapsed_now)";
-
-        package_list_name_regex    => "^(\S+)-(\d+\.?)+";
-        package_list_version_regex => "^\S+-((\d+\.?)+\_\d)";
-
-        package_file_repositories  => { "$(repo)" };
-
-        package_installed_regex    => ".*";
-
-        package_name_convention    => "$(name)-$(version).tbz";
-        package_delete_convention  => "$(name)-$(version)";
-
-        package_add_command        => "/usr/sbin/pkg_add";
-        package_delete_command     => "/usr/sbin/pkg_delete";
-
-    netbsd::
-
-        package_changes => "individual";
-
-        package_list_command => "/usr/sbin/pkg_info";
-
-        package_list_update_command => "/usr/bin/true";
-        package_list_update_ifelapsed => "$(u_common_knowledge.list_update_ifelapsed_now)";
-
-        package_list_name_regex    => "^(\S+)-(\d+\.?)+";
-        package_list_version_regex => "^\S+-((\d+\.?)+\nb\d)";
-
-        package_file_repositories  => { "$(repo)" };
-
-        package_installed_regex    => ".*";
-
-        package_name_convention    => "$(name)-$(version).tgz";
-        package_delete_convention  => "$(name)-$(version)";
-
-        package_add_command        => "/usr/sbin/pkg_add";
-        package_delete_command     => "/usr/sbin/pkg_delete";
-
-    solarisx86|solaris::
-
-        package_changes => "individual";
-        package_list_command => "/usr/bin/pkginfo -l";
-        package_list_update_command => "/usr/bin/true";
-        package_list_update_ifelapsed => "$(u_common_knowledge.list_update_ifelapsed_now)";
-
-        package_multiline_start    => "\s*PKGINST:\s+[^\s]+";
-        package_list_name_regex    => "\s*PKGINST:\s+([^\s]+)";
-        package_list_version_regex => "\s*VERSION:\s+([^\s]+)";
-        package_list_arch_regex    => "\s*ARCH:\s+([^\s]+)";
-
-        package_file_repositories  => { "$(repo)" };
-
-        package_installed_regex    => "\s*STATUS:\s*(completely|partially)\s+installed.*";
-        package_name_convention    => "$(name)-$(version)-$(arch).pkg";
-        package_delete_convention  => "$(name)";
-
-      # Cfengine appends path to package and package name below, respectively
-        package_add_command        => "/bin/sh $(repo)/add_scr $(repo)/admin_file";
-        package_delete_command     => "/usr/sbin/pkgrm -n -a $(repo)/admin_file";
-
-    aix::
-
-        package_changes => "individual";
-
-        package_list_update_command => "/usr/bin/true";
-        package_list_update_ifelapsed => "$(u_common_knowledge.list_update_ifelapsed_now)";
-
-        package_list_command       => "/usr/bin/lslpp -lc";
-        package_list_name_regex    => "[^:]+:([^:]+):[^:]+:.*";
-        package_list_version_regex => "[^:]+:[^:]+:([^:]+):.*";
-
-        package_file_repositories  => { "$(repo)" };
-
-        package_installed_regex    => "[^:]+:[^:]+:[^:]+:[^:]*:(COMMITTED|APPLIED):.*";
-
-        package_name_convention    => "$(name)-$(version).bff";
-        package_delete_convention  => "$(name)";
-
-      # Redirecting the output to '/dev/null' below makes sure 'geninstall' has
-      # its stdout open even if the 'cf-agent' process that started it
-      # terminates (e.g. gets killed).
-        package_add_command        => "/usr/bin/rm -f $(repo)/.toc && /usr/sbin/geninstall -IacgXNY -d $(repo) cfengine-nova > /dev/null$";
-        package_update_command     => "/usr/bin/rm -f $(repo)/.toc && /usr/sbin/geninstall -IacgXNY -d $(repo) cfengine-nova > /dev/null$";
-        package_delete_command     => "/usr/sbin/installp -ug cfengine-nova$";
-
-      # Internal version comparison model doesn't work for W.X.Y.Z
-        package_version_less_command => "$(sys.bindir)/rpmvercmp '$(v1)' lt '$(v2)'";
-        package_version_equal_command => "$(sys.bindir)/rpmvercmp '$(v1)' eq '$(v2)'";
+    # Internal version comparison model doesn't work for W.X.Y.Z
+    package_version_less_command => "$(sys.bindir)/rpmvercmp '$(v1)' lt '$(v2)'";
+    package_version_equal_command => "$(sys.bindir)/rpmvercmp '$(v1)' eq '$(v2)'";
 }
 
 body package_module yum
 # @brief Yum package module default settings
 {
-      query_installed_ifelapsed => "10";
-      query_updates_ifelapsed => "30";
+  query_installed_ifelapsed => "10";
+  query_updates_ifelapsed => "30";
 @if minimum_version(3.12.2)
-      interpreter => "$(sys.bindir)/cfengine-selected-python";
+  interpreter => "$(sys.bindir)/cfengine-selected-python";
 @endif
 }
 
 body package_module apt_get
 # @brief apt_get package module default settings
 {
-      query_installed_ifelapsed => "10";
-      query_updates_ifelapsed => "30";
+  query_installed_ifelapsed => "10";
+  query_updates_ifelapsed => "30";
 @if minimum_version(3.12.2)
-      interpreter => "$(sys.bindir)/cfengine-selected-python";
+  interpreter => "$(sys.bindir)/cfengine-selected-python";
 @endif
 }
 
 body package_module zypper
 {
-        query_installed_ifelapsed => "0";
-        query_updates_ifelapsed => "30";
-      #default_options =>  {};
+  query_installed_ifelapsed => "0";
+  query_updates_ifelapsed => "30";
+
+  #default_options =>  {};
 @if minimum_version(3.12.2)
-        interpreter => "$(sys.bindir)/cfengine-selected-python";
+  interpreter => "$(sys.bindir)/cfengine-selected-python";
 @endif
 }
 
 body package_module msiexec
 # @brief msiexec package module default settings
 {
-      query_installed_ifelapsed => "10";
-      query_updates_ifelapsed => "30";
+  query_installed_ifelapsed => "10";
+  query_updates_ifelapsed => "30";
 @if minimum_version(3.12.2)
-      interpreter => "$(sys.winsysdir)$(const.dirsep)cmd.exe /c ";
+  interpreter => "$(sys.winsysdir)$(const.dirsep)cmd.exe /c ";
 @endif
-      module_path => "$(sys.workdir)$(const.dirsep)modules$(const.dirsep)packages$(const.dirsep)msiexec.bat";
+  module_path => "$(sys.workdir)$(const.dirsep)modules$(const.dirsep)packages$(const.dirsep)msiexec.bat";
 }
+
 body perms u_m(p)
 # @brief Ensure mode is `p`
 # @param p permissions
 {
-      mode  => "$(p)";
+  mode => "$(p)";
 }
 
 body copy_from local_dcp(from)
@@ -1190,6 +1234,6 @@ body copy_from local_dcp(from)
 #
 # **See Also:** `local_cp()`, `remote_dcp()`
 {
-      source      => "$(from)";
-      compare     => "digest";
+  source => "$(from)";
+  compare => "digest";
 }
